@@ -37,7 +37,11 @@ void nudge::un_nudge_up(int timerId, void* caller)
 
 void nudge::nudge_right()
 {
-	_nudge(2.0, 1.0);
+    if (nudged_right)
+        return;
+
+    _nudge(2.0, 1.0);
+    
 	if (timer)
 		timer::kill(timer);
 	timer = timer::set(0.4f, nullptr, un_nudge_right);
@@ -46,7 +50,11 @@ void nudge::nudge_right()
 
 void nudge::nudge_left()
 {
-	_nudge(-2.0, 1.0);
+    if (nudged_left)
+        return;
+
+    _nudge(-2.0, 1.0);
+    
 	if (timer)
 		timer::kill(timer);
 	timer = timer::set(0.4f, nullptr, un_nudge_left);
@@ -55,7 +63,11 @@ void nudge::nudge_left()
 
 void nudge::nudge_up()
 {
-	_nudge(0.0, 1.0);
+    if (nudged_up)
+        return;
+
+    _nudge(0.0, 1.0);
+    
 	if (timer)
 		timer::kill(timer);
 	timer = timer::set(0.4f, nullptr, un_nudge_up);

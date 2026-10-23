@@ -45,6 +45,7 @@ public:
 	static void init(gdrv_bitmap8* bmp, int width, int height);
 	static void uninit();
 	static void recreate_screen_texture();
+	static void PresentTexture(SDL_Texture* texture);
 	static void update();
 	static void AddSprite(render_sprite& sprite);
 	static void RemoveSprite(render_sprite& sprite);
@@ -53,14 +54,25 @@ public:
 	static void build_occlude_list();
 	static void SpriteViewer(bool* show);
 	static void PresentVScreen();
+	static void LoadCustomRightPanel(const std::string& imagePath, const std::string& hdImagePath);
 private:
 	static std::vector<render_sprite*> sprite_list, ball_list;
 	static int offset_x, offset_y;
 	static rectangle_type vscreen_rect;
 	static gdrv_bitmap8* ball_bitmap[20];
 	static zmap_header_type* zscreen;
+	static SDL_Texture* spaceCadetGlowTexture;
+	static SDL_Texture* customRightPanelTexture;
+	static SDL_Texture* customRightPanelHdTexture;
+	static SDL_Rect spaceCadetGlowRect;
 
 	static void repaint(const render_sprite& sprite);
 	static void paint_balls();
 	static void unpaint_balls();
+	static void CreateSpaceCadetGlow();
+	static void PresentSpaceCadetGlow();
+	static void PresentSidebarStars();
+	static void ApplySidebarTextTints();
+	static void PresentCustomRightPanel();
+	static void PresentSidebarDynamicAreas();
 };

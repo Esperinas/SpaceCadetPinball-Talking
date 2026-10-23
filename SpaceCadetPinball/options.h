@@ -30,7 +30,6 @@ enum class Menu1:int
 	WindowUniformScale = 600,
 	WindowLinearFilter = 601,
 	WindowIntegerScale = 602,
-	Prefer3DPBGameData = 700,
 };
 
 enum class InputTypes
@@ -39,6 +38,7 @@ enum class InputTypes
 	Keyboard,
 	Mouse,
 	GameController,
+	Joystick,
 };
 
 struct GameInput
@@ -100,8 +100,8 @@ public:
 	// Original does ~120 updates per second.
 	static constexpr int MaxUps = 360, MaxFps = MaxUps, MinUps = 60, MinFps = MinUps,
 	                     DefUps = 120, DefFps = 60;
-	// Original uses 8 sound channels
-	static constexpr int MaxSoundChannels = 32, MinSoundChannels = 1, DefSoundChannels = 8;
+	// Talking edition defaults to four simultaneous effects; the user can still select up to 32.
+	static constexpr int MaxSoundChannels = 32, MinSoundChannels = 1, DefSoundChannels = 4;
 	static constexpr int MaxVolume = MIX_MAX_VOLUME, MinVolume = 0, DefVolume = MaxVolume;
 	static struct optionsStruct Options;
 	static std::vector<struct OptionBase*> AllOptions;
@@ -265,13 +265,13 @@ struct optionsStruct
 	FloatOption UIScale;
 	BoolOption UniformScaling;
 	BoolOption LinearFiltering;
+	BoolOption EnhancedScaling;
 	IntOption FramesPerSecond;
 	IntOption UpdatesPerSecond;
 	BoolOption ShowMenu;
 	BoolOption UncappedUpdatesPerSecond;
 	IntOption SoundChannels;
 	BoolOption HybridSleep;
-	BoolOption Prefer3DPBGameData;
 	BoolOption IntegerScaling;
 	IntOption SoundVolume;
 	IntOption MusicVolume;
@@ -288,5 +288,9 @@ struct optionsStruct
 	BoolOption DebugOverlayAabb;
 	StringOption FontFileName;
 	StringOption Language;
+	BoolOption ReducedTilt;
+	BoolOption DisableTilt;
+	IntOption LifetimeHighScore;
+	IntOption CenterPostDuration;
 	BoolOption HideCursor;
 };

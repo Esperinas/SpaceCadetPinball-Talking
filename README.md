@@ -1,123 +1,107 @@
-<!-- markdownlint-disable-file MD033 -->
+# 3D Pinball Space Cadet Talking 3.0.32
 
-# SpaceCadetPinball
+Creatiel fork by Gerard Esperinas, based on SpaceCadetPinball 2.1.0 by
+Andrey Muzychenko and community contributors.
+Project: https://creatiel.info/logiciels/3d-pinball-space-cadet-talking/
 
-## Summary
+## What this archive contains
 
-Reverse engineering of `3D Pinball for Windows - Space Cadet`, a game bundled with Windows.
+Complete C++ sources, CMake modules, platform integration files, translation
+and glyph tools, changelog, custom Talking media, Unifont fonts and the
+Freepats instrument set required by Windows software MIDI.
+No executable, DLL, object file, CMake cache, build directory or user scores.
+This is a source archive, not a ready-to-run installation.
 
-## How to play
+Version 3.0.32 fixes a Windows audio bug inherited from upstream 2.1.0:
+native MIDI music volume also changed the whole application's Windows mixer
+volume. Windows now uses TiMidity software synthesis with bundled instruments.
+Linux MIDI configuration is unchanged. The Windows mixer volume is respected.
 
-Place compiled executable into a folder containing original game resources (not included).\
-Supports data files from Windows and Full Tilt versions of the game.
+## Historical game data
 
-## Known source ports
+The original table data, MIDI music and original sound effects are excluded.
+To run a build, supply those resources from a copy you are entitled to use:
+CADET.DAT (or PINBALL.DAT), PINBALL.MID and the original SOUND files.
+Keep the custom SOUND/SOUND2.WAV supplied here, which is the Talking Game Over.
+Do not use PINBALL2.MID as music: it is original bitmap font data.
+See licenses/RESOURCE-NOTICE.txt; the MIT license of the code does not grant
+rights over the historical game resources or other separately licensed media.
 
-| Platform           | Author          | URL                                                                                                        |
-| ------------------ | --------------- | ---------------------------------------------------------------------------------------------------------- |
-| PS Vita            | Axiom           | <https://github.com/suicvne/SpaceCadetPinball_Vita>                                                        |
-| Emscripten         | alula           | <https://github.com/alula/SpaceCadetPinball> <br> Play online: <https://alula.github.io/SpaceCadetPinball> |
-| Nintendo Switch    | averne          | <https://github.com/averne/SpaceCadetPinball-NX>                                                           |
-| webOS TV           | mariotaku       | <https://github.com/webosbrew/SpaceCadetPinball>                                                           |
-| Android (WIP)      | Iscle           | https://github.com/Iscle/SpaceCadetPinball                                                                 |
-| Nintendo Wii       | MaikelChan      | https://github.com/MaikelChan/SpaceCadetPinball                                                            |
-| Nintendo 3DS       | MaikelChan      | https://github.com/MaikelChan/SpaceCadetPinball/tree/3ds                                                   |
-| Nintendo DS        | Headshotnoby    | https://github.com/headshot2017/3dpinball-nds                                                              |
-| Nintendo Wii U     | IntriguingTiles | https://github.com/IntriguingTiles/SpaceCadetPinball-WiiU                                                  |
-| PlayStation 2      | Headshotnoby    | https://github.com/headshot2017/3dpinball-ps2                                                              |
-| Sega Dreamcast     | Headshotnoby    | https://github.com/headshot2017/3dpinball-dc                                                               |
-| MorphOS            | BeWorld         | https://www.morphos-storage.net/?id=1688897                                                                |
-| AmigaOS 4          | rjd324          | http://aminet.net/package/game/actio/spacecadetpinball-aos4                                                |
-| Android (WIP)      | fexed           | https://github.com/fexed/Pinball-on-Android                                                                |
+## Build on Ubuntu 24.04 x64
 
-Platforms covered by this project: desktop Windows, Linux and macOS.
-
-<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-
-## Source
-
-* `pinball.exe` from `Windows XP` (SHA-1 `2A5B525E0F631BB6107639E2A69DF15986FB0D05`) and its public PDB
-* `CADET.EXE` 32bit version from `Full Tilt! Pinball` (SHA-1 `3F7B5699074B83FD713657CD94671F2156DBEDC4`)
-
-## Tools used
-
-`Ghidra`, `Ida`, `Visual Studio`
-
-## What was done
-
-* All structures were populated, globals and locals named.
-* All subs were decompiled, C pseudo code was converted to compilable C++. Loose (namespace?) subs were assigned to classes.
-
-## Compiling
-
-Project uses `C++11` and depends on `SDL2` libs.
-
-### On Windows
-
-Download and unpack devel packages for `SDL2` and `SDL2_mixer`.\
-Set paths to them in `CMakeLists.txt`, see suggested placement in `/Libs`.\
-Compile with Visual Studio; tested with 2019.
-
-### On Linux
-
-Install devel packages for `SDL2` and `SDL2_mixer`.\
-Compile with CMake; tested with GCC 10, Clang 11.\
-To cross-compile for Windows, install a 64-bit version of mingw and its `SDL2` and `SDL2_mixer` distributions, then use the `mingwcc.cmake` toolchain.
-
-[![Packaging status](https://repology.org/badge/tiny-repos/spacecadetpinball.svg)](https://repology.org/project/spacecadetpinball/versions) 
-
-Some distributions provide a package in their repository. You can use those for easier dependency management and updates.
-
-This project is available as Flatpak on [Flathub](https://flathub.org/apps/details/com.github.k4zmu2a.spacecadetpinball).
-
-### On macOS
-
-Install XCode (or at least Xcode Command Line Tools with `xcode-select --install`) and CMake.
-
-**HomeBrew**
-
-You can easily install the build artifact by using `brew`.
+Install the development dependencies:
 
 ```sh
-brew tap draftbrew/tap
-brew install --no-quarantine space-cadet-pinball
+sudo apt install build-essential cmake libsdl2-dev libsdl2-mixer-dev timidity fluid-soundfont-gm
+cmake -S . -B build
+cmake --build build -j2
 ```
 
-Be aware that the flag `--no-quarantime` will disable macOS's Gatekeeper during installation.
+CMake places the executable in bin/SpaceCadetPinball. Once historical game
+resources have been supplied, run from the project directory:
 
-**Manual compilation:**
+```sh
+./bin/SpaceCadetPinball
+```
 
-* **Homebrew**: Install the `SDL2`, `SDL2_mixer` homebrew packages.
-* **MacPorts**: Install the `libSDL2`, `libSDL2_mixer` macports packages.
+If MIDI needs a SoundFont, the installed FluidR3 file can be selected:
 
-Compile with CMake. Ensure that `CMAKE_OSX_ARCHITECTURES` variable is set for either `x86_64` Apple Intel or `arm64` for Apple Silicon.
+```sh
+SDL_SOUNDFONTS=/usr/share/sounds/sf2/FluidR3_GM.sf2 ./bin/SpaceCadetPinball
+```
 
-Tested with: macOS Big Sur (Intel) with Xcode 13 & macOS Montery Beta (Apple Silicon) with Xcode 13.
+Preferences and scores use SDL_GetPrefPath, normally
+~/.local/share/SpaceCadetPinball/. For isolated tests:
 
-**Automated compilation:**
+```sh
+mkdir -p "$HOME/SpaceCadet-source-test/data"
+XDG_DATA_HOME="$HOME/SpaceCadet-source-test/data" ./bin/SpaceCadetPinball
+```
 
-Run the `build-mac-app.sh` script from the root of the repository. The app will be available in a DMG file named `SpaceCadetPinball-<version>-mac.dmg`.
+## Build on Windows x64
 
-Tested with: macOS Ventura (Apple Silicon) with Xcode Command Line Tools 14 & macOS Big Sur on GitHub Runner (Intel) with XCode 13.
+Use a C++11 compiler and CMake, with matching SDL 2.30.0 and SDL_mixer 2.8.0
+x64 development packages. CMake searches Libs/SDL2 and Libs/SDL2_mixer;
+SDL2_PATH and SDL2_MIXER_PATH can also be specified at configuration time.
+For Visual Studio, use the developer terminal and configure an x64 build:
 
-## Plans
+```powershell
+cmake -S . -B build-win64 -A x64
+cmake --build build-win64 --config Release
+```
 
-* ~~Decompile original game~~
-* ~~Resizable window, scaled graphics~~
-* ~~Loader for high-res sprites from CADET.DAT~~
-* ~~Cross-platform port using SDL2, SDL2_mixer, ImGui~~
-* Full Tilt Cadet features
-* Localization support
-* Maybe: Support for the other two tables - Dragon and Pirate
-* Maybe: Game data editor
+Copy the matching SDL2.dll and SDL2_mixer.dll beside the resulting executable.
+Depending on the generator, it may be under bin/Release: copy the runtime
+media there too. In particular MIDI/timidity.cfg and the Tone_000 and Drum_000
+folders must remain next to the executable, under MIDI/.
+Historical game data and custom media are also required at runtime.
+The official 3.0.32 binary was cross-compiled with LLVM-MinGW and tested on
+Windows by Gerard. The Visual Studio commands are build guidance, not a claim
+that this particular toolchain was tested for this source package.
+For libc++ toolchains, explicit pre-includes may be needed:
+-include functional -include cfloat -include new.
 
-## On 64-bit bug that killed the game
+## Rebuild the Windows installer
 
-I did not find it, decompiled game worked in x64 mode on the first try.\
-It was either lost in decompilation or introduced in x64 port/not present in x86 build.\
-Based on public description of the bug (no ball collision), I guess that the bug was in `TEdgeManager::TestGridBox`
+The NSIS script in packaging/ targets Windows 10/11 x64 and per-user setup.
+Prepare dist/windows/ with the compiled executable, matching DLLs and runtime
+resources, then run makensis packaging/installer-3.0.32.nsi with NSIS 3.09+.
+The script creates Start menu shortcuts, an optional Desktop shortcut and
+an uninstaller. User preferences and scores are preserved on uninstall.
+
+## Validation and supported platforms
+
+Windows 3.0.32 audio fix validated by Gerard. Ubuntu 24.04 runtime validated
+with 3.0.31; version 3.0.32 leaves Linux audio unchanged. macOS is not validated.
+Archive checked for CRC integrity, source-list completeness, version consistency,
+corrected Windows MIDI code and all instrument configuration references.
+A fresh end-to-end build from this cleaned archive has not been run here.
+
+## En francais
+
+Cette archive contient les sources completes 3.0.32, les medias propres au
+fork et les instruments MIDI Windows. Les ressources historiques du jeu sont
+exclues et doivent etre fournies separement pour jouer. Aucune compilation
+n'est necessaire pour les installateurs proposes sur la page officielle.
+Les commandes ci-dessus expliquent la compilation Ubuntu et Windows.
+Le fichier CHANGELOG.TXT contient l'historique, dont le bogue MIDI Windows.

@@ -196,8 +196,7 @@ bool midi::play_track(MidiTracks track, bool replay)
 		return false;
 	}
 
-	// On Windows, MIDI volume can only be set during playback.
-	// And it changes application master volume for some reason.
+	// Apply the saved music level to the newly started track.
 	SetVolume(Volume);
 	active_track = track;
 	return true;

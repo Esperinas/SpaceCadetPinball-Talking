@@ -1,0 +1,14 @@
+Licenses and resources
+
+The upstream C++ code is covered by the MIT license in LICENSE.
+Retain all existing copyright notices when redistributing source.
+The historical game data (CADET.DAT/PINBALL.DAT, original MIDI and original
+sound effects) are not covered by that MIT license and are excluded from
+this source archive. No permission to redistribute those assets is asserted.
+Custom Creatiel voices and artwork are included as project assets; do not
+assume the upstream MIT license automatically licenses these separate media.
+GNU Unifont: see UNIFONT-NOTICE.TXT and OFL-1.1.txt.
+Freepats: unmodified instrument patches, bin/MIDI/COPYRIGHT-Freepats.txt
+and bin/MIDI/GPL-2.txt. The samples are supplied in their native .pat format.
+SDL and SDL_mixer are external build dependencies with their own notices.
+Bundled Dear ImGui retains its MIT license notice in the source headers.

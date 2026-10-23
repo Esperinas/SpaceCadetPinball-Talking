@@ -79,6 +79,9 @@ public:
 	                        int srcXOff, int srcYOff);
 	static void copy_bitmap_w_transparency(gdrv_bitmap8* dstBmp, int width, int height, int xOff, int yOff,
 	                                       gdrv_bitmap8* srcBmp, int srcXOff, int srcYOff);
+	static void copy_bitmap_w_transparency_tinted(gdrv_bitmap8* dstBmp, int width, int height, int xOff, int yOff,
+	                                              gdrv_bitmap8* srcBmp, int srcXOff, int srcYOff,
+	                                              ColorRgba tint);
 	static void ScrollBitmapHorizontal(gdrv_bitmap8* bmp, int xStart);
 	static void grtext_draw_ttext_in_box();
 	static void ApplyPalette(gdrv_bitmap8& bmp);

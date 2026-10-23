@@ -66,7 +66,8 @@ class winmain
 	using TimePoint = std::chrono::time_point<Clock>;
 
 public:
-	static constexpr const char* Version = "2.1.1 DEV";
+	static constexpr const char* ProductName = "3D Pinball Space Cadet Talking";
+	static constexpr const char* Version = "3.0";
 	static bool single_step;
 	static SDL_Window* MainWindow;
 	static SDL_Renderer* Renderer;
@@ -85,6 +86,7 @@ public:
 	static void new_game();
 	static void pause(bool toggle = true);
 	static void Restart();
+	static void ShowShockWarning();
 	static void UpdateFrameRate();
 	static void HandleGameBinding(GameBindings binding, bool shortcut);
 private:
@@ -107,6 +109,7 @@ private:
 	static unsigned gfrOffset;
 	static float gfrWindow;
 	static int CursorIdleCounter;
+	static uint32_t ShockWarningUntil;
 
 	static void RenderUi();
 	static void RenderFrameTimeDialog();

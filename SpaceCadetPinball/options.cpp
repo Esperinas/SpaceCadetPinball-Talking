@@ -121,24 +121,24 @@ optionsStruct options::Options
 		},
 	},
 	{"Sounds", true},
-	{"Music", false},
+	{"Music", true},
 	{"FullScreen", false},
 	{"Players", 1},
 	{"Screen Resolution", -1},
 	{"UI Scale", 1.0f},
 	{"Uniform scaling", true},
 	{"Linear Filtering", true},
+	{"Enhanced Scaling", false},
 	{"Frames Per Second", DefFps},
 	{"Updates Per Second", DefUps},
 	{"ShowMenu", true},
 	{"Uncapped Updates Per Second", false},
 	{"Sound Channels", DefSoundChannels},
 	{"HybridSleep", false},
-	{"Prefer 3DPB Game Data", false},
 	{"Integer Scaling", false},
-	{"Sound Volume", DefVolume},
-	{"Music Volume", DefVolume},
-	{"Stereo Sound Effects", false},
+	{"Sound Volume", 85},
+	{"Music Volume", 10},
+	{"Stereo Sound Effects", true},
 	{"Debug Overlay", false},
 	{"Debug Overlay Grid", true},
 	{"Debug Overlay All Edges", true},
@@ -151,6 +151,10 @@ optionsStruct options::Options
 	{"Debug Overlay AABB", true},
 	{"FontFileName", ""},
 	{"Language", translations::GetCurrentLanguage()->ShortName},
+	{"Reduced Tilt", true},
+	{"Disable Tilt", false},
+	{"Lifetime High Score", 0},
+	{"Center Post Duration", 60},
 	{"Hide Cursor", false},
 };
 
@@ -303,10 +307,6 @@ void options::toggle(Menu1 uIDCheckItem)
 	case Menu1::WindowLinearFilter:
 		Options.LinearFiltering ^= true;
 		render::recreate_screen_texture();
-		break;
-	case Menu1::Prefer3DPBGameData:
-		Options.Prefer3DPBGameData ^= true;
-		winmain::Restart();
 		break;
 	case Menu1::WindowIntegerScale:
 		Options.IntegerScaling ^= true;
@@ -519,6 +519,9 @@ std::string GameInput::GetFullInputDescription() const
 	case InputTypes::GameController:
 		prefix = "Controller\n";
 		break;
+	case InputTypes::Joystick:
+		prefix = "Joystick\n";
+		break;
 	case InputTypes::None:
 	default:
 		return "Unused";
@@ -581,6 +584,9 @@ std::string GameInput::GetShortInputDescription() const
 			keyName = controllerButtons[Value];
 		else
 			keyName = "CButton" + std::to_string(Value);
+		break;
+	case InputTypes::Joystick:
+		keyName = "Button " + std::to_string(Value);
 		break;
 	case InputTypes::None:
 	default:

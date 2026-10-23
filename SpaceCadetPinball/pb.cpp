@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "pb.h"
+#include "BuildInfo.h"
 
 
 #include "control.h"
@@ -39,6 +40,7 @@ bool pb::FullTiltMode = false, pb::FullTiltDemoMode = false, pb::cheat_mode = fa
 std::string pb::DatFileName, pb::BasePath;
 ImU32 pb::TextBoxColor;
 int pb::quickFlag = 0;
+
 TTextBox *pb::InfoTextBox, *pb::MissTextBox;
 
 
@@ -51,16 +53,18 @@ int pb::init()
 	auto dataFilePath = make_path_name(DatFileName);
 	record_table = partman::load_records(dataFilePath.c_str(), FullTiltMode);
 
-	auto useBmpFont = 0;
-	get_rc_int(Msg::TextBoxUseBitmapFont, &useBmpFont);
-	if (useBmpFont)
-		score::load_msg_font("pbmsg_ft");
-
 	if (!record_table)
 		return 1;
 
 	auto plt = (ColorRgba*)record_table->field_labeled("background", FieldTypes::Palette);
 	gdrv::display_palette(plt);
+
+	// The bitmap glyphs must be created after the DAT palette has been applied.
+	// Generated accented glyphs copy the already-coloured ASCII glyph pixels.
+	auto useBmpFont = 0;
+	get_rc_int(Msg::TextBoxUseBitmapFont, &useBmpFont);
+	if (useBmpFont)
+		score::load_msg_font("pbmsg_ft");
 
 	auto backgroundBmp = record_table->GetBitmap(record_table->record_labeled("background"));
 	auto cameraInfoId = record_table->record_labeled("camera_info") + fullscrn::GetResolution();
@@ -92,6 +96,8 @@ int pb::init()
 		backgroundBmp,
 		0,
 		0);
+	render::LoadCustomRightPanel(make_path_name("TABLE_RIGHT_CUSTOM.BMP"),
+	                             make_path_name("TABLE_RIGHT_CUSTOM_HD.BMP"));
 
 	loader::loadfrom(record_table);
 
@@ -104,6 +110,15 @@ int pb::init()
 	MainTable = new TPinballTable();
 
 	high_score::read();
+	// Migrate existing installations: an old high-score entry also counts as an attained score.
+	for (const auto& entry : high_score::highscore_table)
+	{
+		if (entry.Score > options::Options.LifetimeHighScore)
+		{
+			options::Options.LifetimeHighScore = entry.Score;
+			options::set_int("Lifetime High Score", entry.Score);
+		}
+	}
 	auto ball = MainTable->BallList.at(0);
 	BallMaxSpeed = ball->Radius * 200.0f;
 	BallHalfRadius = ball->Radius * 0.5f;
@@ -120,6 +135,7 @@ int pb::init()
 
 int pb::uninit()
 {
+	high_score::ShutdownSounds();
 	score::unload_msg_font();
 	loader::unload();
 	delete record_table;
@@ -143,11 +159,8 @@ void pb::SelectDatFile(const std::vector<const char*>& dataSearchPaths)
 		"DEMO.DAT",
 	};
 
-	// Default game data test order: CADET.DAT, PINBALL.DAT, DEMO.DAT
-	if (options::Options.Prefer3DPBGameData)
-	{
-		std::swap(datFileNames[0], datFileNames[1]);
-	}
+	// Talking 3.0 always gives priority to the Full Tilt Space Cadet data.
+	// PINBALL.DAT and DEMO.DAT remain available only as compatibility fallbacks.
 	for (auto path : dataSearchPaths)
 	{
 		if (!path)
@@ -190,12 +203,20 @@ void pb::reset_table()
 
 void pb::firsttime_setup()
 {
+	static bool welcomeShown = false;
+	if (!welcomeShown && MissTextBox)
+	{
+		const std::string welcome = std::string("Welcome\nSpace Cadet Talking\nV ") + BuildInfo::Version;
+		MissTextBox->Clear();
+		MissTextBox->Display(welcome.c_str(), -1.0f);
+		welcomeShown = true;
+	}
 	render::update();
 }
 
 void pb::mode_change(GameModes mode)
 {
-	if (CreditsActive && MissTextBox)
+	if (CreditsActive)
 		MissTextBox->Clear(true);
 	CreditsActive = false;
 	IdleTimerMs = 0;
@@ -322,15 +343,25 @@ void pb::frame(float dtMilliSec)
 	timer::check();
 	render::update();
 	score::update(MainTable->CurScoreStruct);
+	
+	
 	if (!MainTable->TiltLockFlag)
 	{
-		if (nudge::nudge_count > 0.5f)
+		const float warningThreshold = options::Options.ReducedTilt ? 1.0f : 0.5f;
+		const float tiltThreshold = options::Options.ReducedTilt ? 2.0f : 1.0f;
+
+		if (nudge::nudge_count > warningThreshold)
 		{
-			InfoTextBox->Display(get_rc_string(Msg::STRING126), 2.0);
+			if (options::Options.DisableTilt)
+				winmain::ShowShockWarning();
+			else
+				InfoTextBox->Display(get_rc_string(Msg::STRING126), 2.0);
 		}
-		if (nudge::nudge_count > 1.0f)
+
+		if (nudge::nudge_count > tiltThreshold && !options::Options.DisableTilt)
 			MainTable->tilt(time_now);
 	}
+	
 }
 
 void pb::timed_frame(float timeDelta)

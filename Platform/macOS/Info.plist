@@ -4,32 +4,48 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
+
 	<key>CFBundleExecutable</key>
 	<string>SpaceCadetPinball</string>
+
 	<key>CFBundleIconFile</key>
 	<string>SpaceCadetPinball.icns</string>
+
 	<key>CFBundleIdentifier</key>
-	<string>com.github.k4zmu2a.spacecadetpinball</string>
+	<string>info.creatiel.spacecadetpinballtalking</string>
+
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
-	<key>CFBundleLongVersionString</key>
-	<string></string>
+
 	<key>CFBundleName</key>
-	<string>SpaceCadetPinball</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
+	<string>3D Pinball Space Cadet Talking</string>
+
+	<key>CFBundleDisplayName</key>
+	<string>3D Pinball Space Cadet Talking</string>
+
+	<key>CFBundleLongVersionString</key>
+	<string>3D Pinball Space Cadet Talking CHANGEME_SW_VERSION</string>
+
 	<key>CFBundleShortVersionString</key>
 	<string>CHANGEME_SW_VERSION</string>
+
+	<key>CFBundleVersion</key>
+	<string>CHANGEME_SW_VERSION</string>
+
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+
 	<key>CFBundleSignature</key>
 	<string>????</string>
+
 	<key>CFBundleSupportedPlatforms</key>
 	<array>
 		<string>MacOSX</string>
 	</array>
+
 	<key>CSResourcesFileMapped</key>
 	<true/>
-	<key>LSMinimumSystemVersion</key>
-	<string>10.11</string>
+
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

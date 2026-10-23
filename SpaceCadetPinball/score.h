@@ -11,13 +11,22 @@ struct scoreStruct
 	int Width;
 	int Height;
 	gdrv_bitmap8* CharBmp[10];
+	bool UseTint{};
+	ColorRgba TintColor{};
+	uint32_t BlinkStartTicks{};
+	bool BlinkActive{};
 };
 
 struct score_msg_font_type
 {
 	int GapWidth;
 	int Height;
-	gdrv_bitmap8* Chars[128]{};
+	gdrv_bitmap8* Chars[256]{};
+	std::unordered_map<uint32_t, gdrv_bitmap8*> UnicodeChars{};
+	std::vector<gdrv_bitmap8*> GeneratedChars{};
+
+	~score_msg_font_type();
+	gdrv_bitmap8* GetGlyph(uint32_t codepoint) const;
 };
 
 

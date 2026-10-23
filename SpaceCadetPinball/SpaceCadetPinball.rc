@@ -1,1 +1,37 @@
+#include <windows.h>
+
 ICON_1 ICON "Icon_1.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 3,0,0,0
+ PRODUCTVERSION 3,0,0,0
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Creatiel"
+            VALUE "FileDescription", "3D Pinball Space Cadet Talking"
+            VALUE "FileVersion", "3.0"
+            VALUE "InternalName", "SpaceCadetPinball"
+            VALUE "OriginalFilename", "SpaceCadetPinball.exe"
+            VALUE "ProductName", "3D Pinball Space Cadet Talking"
+            VALUE "ProductVersion", "3.0"
+            VALUE "Comments", "Creatiel fork based on SpaceCadetPinball 2.1.0"
+        END
+    END
+
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

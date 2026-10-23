@@ -1,17 +1,89 @@
 #include "pch.h"
+#include "BuildInfo.h"
 #include "winmain.h"
 
 #include "control.h"
-#include "EmbeddedData.h"
 #include "fullscrn.h"
 #include "midi.h"
 #include "options.h"
 #include "pb.h"
 #include "render.h"
 #include "Sound.h"
+#include "TPinballTable.h"
 #include "translations.h"
 #include "font_selection.h"
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+static HANDLE SingleInstanceHandle = nullptr;
+#else
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+static int SingleInstanceFd = -1;
+#endif
+
+namespace
+{
+	constexpr int CheatsCodeUnlockScore = 18000000;
+	constexpr int EasyModeUnlockScore = 30000000;
+
+	bool AcquireSingleInstance(const char* prefPath)
+	{
+#ifdef _WIN32
+		SingleInstanceHandle = CreateMutexA(nullptr, TRUE, "Local\\Creatiel.SpaceCadetPinballTalking");
+		if (!SingleInstanceHandle || GetLastError() == ERROR_ALREADY_EXISTS)
+		{
+			if (SingleInstanceHandle)
+			{
+				CloseHandle(SingleInstanceHandle);
+				SingleInstanceHandle = nullptr;
+			}
+			return false;
+		}
+#else
+		auto lockPath = std::string(prefPath) + "SpaceCadetPinballTalking.lock";
+		SingleInstanceFd = open(lockPath.c_str(), O_CREAT | O_RDWR, 0600);
+		if (SingleInstanceFd < 0 || flock(SingleInstanceFd, LOCK_EX | LOCK_NB) != 0)
+		{
+			if (SingleInstanceFd >= 0)
+			{
+				close(SingleInstanceFd);
+				SingleInstanceFd = -1;
+			}
+			return false;
+		}
+#endif
+		return true;
+	}
+
+	void ReleaseSingleInstance()
+	{
+#ifdef _WIN32
+		if (SingleInstanceHandle)
+		{
+			ReleaseMutex(SingleInstanceHandle);
+			CloseHandle(SingleInstanceHandle);
+			SingleInstanceHandle = nullptr;
+		}
+#else
+		if (SingleInstanceFd >= 0)
+		{
+			flock(SingleInstanceFd, LOCK_UN);
+			close(SingleInstanceFd);
+			SingleInstanceFd = -1;
+		}
+#endif
+	}
+}
+
+constexpr const char* winmain::ProductName;
 constexpr const char* winmain::Version;
 
 SDL_Window* winmain::MainWindow = nullptr;
@@ -51,12 +123,13 @@ optionsStruct& winmain::Options = options::Options;
 winmain::DurationMs winmain::SpinThreshold = DurationMs(0.005);
 WelfordState winmain::SleepState{};
 int winmain::CursorIdleCounter = 0;
+uint32_t winmain::ShockWarningUntil = 0;
 
 int winmain::WinMain(LPCSTR lpCmdLine)
 {
 	std::set_new_handler(memalloc_failure);
 
-	printf("Game version: %s\n", Version);
+	printf("%s - Version %s\n", ProductName, BuildInfo::Version);
 	printf("Command line: %s\n", lpCmdLine);
 	printf("Compiled with: SDL %d.%d.%d;", SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL);
 	printf(" SDL_mixer %d.%d.%d;", SDL_MIXER_MAJOR_VERSION, SDL_MIXER_MINOR_VERSION, SDL_MIXER_PATCHLEVEL);
@@ -71,12 +144,25 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		return 1;
 	}
 
+	auto prefPath = SDL_GetPrefPath("", "SpaceCadetPinball");
+	auto basePath = SDL_GetBasePath();
+	if (!prefPath || !AcquireSingleInstance(prefPath))
+	{
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, ProductName,
+		                         "Space Cadet Pinball is already running.\n"
+		                         "Le jeu est deja en cours d'execution.", nullptr);
+		SDL_free(basePath);
+		SDL_free(prefPath);
+		SDL_Quit();
+		return 0;
+	}
+
 	pb::quickFlag = strstr(lpCmdLine, "-quick") != nullptr;
 
 	// SDL window
 	SDL_Window* window = SDL_CreateWindow
 	(
-		pb::get_rc_string(Msg::STRING139),
+		ProductName,
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		800, 556,
 		SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE
@@ -111,11 +197,27 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 
-	auto prefPath = SDL_GetPrefPath("", "SpaceCadetPinball");
-	auto basePath = SDL_GetBasePath();
+	// Windows native MIDI changes the application's Windows mixer volume.
+	// Use the bundled software synthesizer and disable that backend entirely.
+#if defined(_WIN32) && SDL_MIXER_VERSION_ATLEAST(2, 6, 0)
+	SDL_SetHintWithPriority("SDL_NATIVE_MUSIC", "0", SDL_HINT_OVERRIDE);
+	SDL_SetHintWithPriority("SDL_MIXER_DISABLE_NATIVEMIDI", "1", SDL_HINT_OVERRIDE);
+	auto timidityConfig = std::string(basePath) + "MIDI/timidity.cfg";
+	SDL_setenv("TIMIDITY_CFG", timidityConfig.c_str(), 1);
+	Mix_SetTimidityCfg(timidityConfig.c_str());
+	printf("Windows MIDI: software synthesis; native MIDI disabled.\n");
+#endif
 
 	// SDL mixer init
 	bool mixOpened = false, noAudio = strstr(lpCmdLine, "-noaudio") != nullptr;
+	
+	#if defined(__linux__) && SDL_MIXER_VERSION_ATLEAST(2, 6, 0)
+		if (SDL_getenv("TIMIDITY_CFG") == nullptr)
+		{
+			Mix_SetTimidityCfg("/etc/timidity/timidity.cfg");
+		}
+	#endif
+	
 	if (!noAudio)
 	{
 		if ((Mix_Init(MIX_INIT_MID_Proxy) & MIX_INIT_MID_Proxy) == 0)
@@ -130,23 +232,6 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		}
 		else
 			mixOpened = true;
-	}
-
-	{
-		// Load SDL Game Controller definitions from DB
-		unsigned decompressedSize{};
-		const auto controllerDb = ImFontAtlas::DecompressCompressedStbData(
-			EmbeddedData::SDL_GameControllerDB_compressed_data,
-			EmbeddedData::SDL_GameControllerDB_compressed_size,
-			decompressedSize);
-		auto rw = SDL_RWFromMem(controllerDb, decompressedSize);
-		const auto added = SDL_GameControllerAddMappingsFromRW(rw, 1);
-		IM_FREE(controllerDb);
-		if (added < 0)
-		{
-			printf("Could not load game controller DB.\nSDL Error: %s\n", SDL_GetError());
-			SDL_ClearError();
-		}
 	}
 
 	auto resetAllOptions = strstr(lpCmdLine, "-reset") != nullptr;
@@ -170,7 +255,14 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 			options::ResetAllOptions();
 		}
 
-		if (!Options.FontFileName.V.empty())
+		std::string menuFontFile = Options.FontFileName.V;
+		const auto menuLanguage = translations::GetCurrentLanguage()->Language;
+		if (menuFontFile.empty() && menuLanguage == Lang::Japanese)
+			menuFontFile = std::string(basePath) + "unifont_jp-17.0.03.otf";
+		else if (menuFontFile.empty() && menuLanguage != Lang::English)
+			menuFontFile = std::string(basePath) + "unifont-17.0.03.otf";
+
+		if (!menuFontFile.empty())
 		{
 			ImVector<ImWchar> ranges;
 			translations::GetGlyphRange(&ranges);
@@ -182,7 +274,7 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 
 			// ToDo: improve font file test, checking if file exists is not enough
 			auto fontLoaded = false;
-			auto fileName = Options.FontFileName.V.c_str();
+			auto fileName = menuFontFile.c_str();
 			auto fileHandle = fopenu(fileName, "rb");
 			if (fileHandle)
 			{
@@ -219,6 +311,8 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		options::InitSecondary();
 
 		Sound::Init(mixOpened, Options.SoundChannels, Options.Sounds, Options.SoundVolume);
+		Mix_Chunk* welcomeVoice = nullptr;
+		
 		if (!mixOpened)
 			Options.Sounds = false;
 
@@ -243,7 +337,6 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		fullscrn::init();
 
 		pb::reset_table();
-		pb::firsttime_setup();
 
 		if (strstr(lpCmdLine, "-fullscreen"))
 		{
@@ -263,7 +356,21 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		else
 			pb::replay_level(false);
 
+		// NewGame initializes the mission display; install the startup welcome afterwards.
+		pb::firsttime_setup();
+
+		welcomeVoice = Sound::LoadWaveFile(pb::make_path_name("WELCOME.WAV"));
+
+		if (welcomeVoice)
+			Sound::PlaySound(welcomeVoice, pb::time_ticks, nullptr, "welcome_voice");
+
 		MainLoop();
+		
+		if (welcomeVoice)
+		{
+			Sound::FreeSound(welcomeVoice);
+			welcomeVoice = nullptr;
+		}
 
 		options::uninit();
 		midi::music_shutdown();
@@ -287,6 +394,7 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 	SDL_free(prefPath);
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
+	ReleaseSingleInstance();
 	SDL_Quit();
 
 	return return_value;
@@ -454,21 +562,88 @@ void winmain::MainLoop()
 
 void winmain::RenderUi()
 {
-	// Transparent menu bar with a button for preventing menu lockout.
-	ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4{});
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{});
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-	if (!Options.ShowMenu && ImGui::BeginMainMenuBar())
+	// These overlays are anchored to the original 960x666 pinball surface so
+	// they remain attached to the table artwork at every window size.
+	auto pinballPointToScreen = [](int x, int y)
 	{
-		if (ImGui::MenuItem("Menu"))
+		const auto rect = fullscrn::GetScreenRectFromPinballRect(SDL_Rect{x, y, 1, 1});
+		return ImVec2(static_cast<float>(rect.x), static_cast<float>(rect.y));
+	};
+
+		if (pb::MainTable && pb::MainTable->ExtraBalls > 0)
 		{
-			options::toggle(Menu1::Show_Menu);
-			ImGui::FocusWindow(nullptr);
-		}
-		ImGui::EndMainMenuBar();
+			char extraBallsText[32];
+			snprintf(extraBallsText, sizeof extraBallsText, "EXTRA BALLS: %d", pb::MainTable->ExtraBalls);
+
+			const auto textSize = ImGui::CalcTextSize(extraBallsText);
+			const auto arcCenter = pinballPointToScreen(790, 90);
+			const ImVec2 textPos(arcCenter.x - textSize.x * 0.5f, arcCenter.y - textSize.y * 0.5f);
+			const auto textColor = IM_COL32(80, 255, 80, 255);
+
+			ImGui::GetForegroundDrawList()->AddText(textPos, textColor, extraBallsText);
+			ImGui::GetForegroundDrawList()->AddText(
+				ImVec2(textPos.x + 1.0f, textPos.y),
+				textColor,
+				extraBallsText);
+			ImGui::GetForegroundDrawList()->AddText(
+				ImVec2(textPos.x, textPos.y + 1.0f),
+				textColor,
+				extraBallsText);
+			ImGui::GetForegroundDrawList()->AddText(
+				ImVec2(textPos.x + 1.0f, textPos.y + 1.0f),
+				textColor,
+				extraBallsText);
 	}
-	ImGui::PopStyleVar(1);
-	ImGui::PopStyleColor(2);
+
+	if (ShockWarningUntil != 0 && !SDL_TICKS_PASSED(SDL_GetTicks(), ShockWarningUntil))
+	{
+		constexpr const char* shockText = "Shock !";
+		const auto textSize = ImGui::CalcTextSize(shockText);
+		const auto cinematronicsCenter = pinballPointToScreen(105, 654);
+		const ImVec2 textPos(cinematronicsCenter.x - textSize.x * 0.5f, cinematronicsCenter.y - textSize.y * 0.5f);
+		ImGui::GetForegroundDrawList()->AddText(textPos, IM_COL32(255, 32, 32, 255), shockText);
+	}
+
+	const auto centerPostSeconds = control::GetCenterPostSecondsRemaining();
+	if (centerPostSeconds != 0)
+	{
+		char centerPostText[16];
+		if (centerPostSeconds < 0)
+			snprintf(centerPostText, sizeof centerPostText, "∞");
+		else
+			snprintf(centerPostText, sizeof centerPostText, "%d s", centerPostSeconds);
+		const auto textSize = ImGui::CalcTextSize(centerPostText);
+		const auto maxisCenter = pinballPointToScreen(473, 654);
+		const ImVec2 textPos(maxisCenter.x - textSize.x * 0.5f, maxisCenter.y - textSize.y * 0.5f);
+		ImGui::GetForegroundDrawList()->AddText(textPos, IM_COL32(80, 255, 80, 255), centerPostText);
+	}
+	
+	// A minimal window with a button to prevent menu lockout.
+	if (!Options.ShowMenu)
+	{
+		ImGui::SetNextWindowPos(ImVec2{});
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{10, 0});
+		if (ImGui::Begin("main", nullptr,
+			 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
+			 ImGuiWindowFlags_AlwaysAutoResize |
+			 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoFocusOnAppearing))
+		{
+			ImGui::PushID(1);
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{});
+			if (ImGui::Button("Menu"))
+			{
+				options::toggle(Menu1::Show_Menu);
+			}
+			ImGui::PopStyleColor(1);
+			ImGui::PopID();
+		}
+		ImGui::End();
+		ImGui::PopStyleVar();
+
+		// This window can not loose nav focus for some reason, clear it manually.
+		if (ImGui::IsKeyDown(ImGuiKey_Escape) || ImGui::IsKeyDown(ImGuiKey_GamepadFaceRight))
+			ImGui::FocusWindow(nullptr);
+	}
 
 	// No demo window in release to save space
 #ifndef NDEBUG
@@ -507,6 +682,14 @@ void winmain::RenderUi()
 				end_pause();
 				pb::toggle_demo();
 			}
+			if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu1_WebProject)))
+			{
+				// Give the browser the foreground even when the game is fullscreen.
+				SDL_MinimizeWindow(MainWindow);
+				SDL_PumpEvents();
+				SDL_Delay(100);
+				SDL_OpenURL("https://creatiel.info/logiciels/3d-pinball-space-cadet-talking/");
+			}
 			ImGuiMenuItemWShortcut(GameBindings::Exit);
 			ImGui::EndMenu();
 		}
@@ -540,7 +723,49 @@ void winmain::RenderUi()
 				ImGui::EndMenu();
 			}
 			ImGuiMenuItemWShortcut(GameBindings::ShowControlDialog);
-			if (ImGui::BeginMenu("Language"))
+			if (ImGui::BeginMenu(pb::get_rc_string(Msg::Menu3_Tilt)))
+			{
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_TiltHard), nullptr, !Options.ReducedTilt && !Options.DisableTilt))
+				{
+					Options.ReducedTilt = false;
+					Options.DisableTilt = false;
+				}
+
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_TiltSoft), nullptr, Options.ReducedTilt && !Options.DisableTilt))
+				{
+					Options.ReducedTilt = true;
+					Options.DisableTilt = false;
+				}
+
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_NoTilt), nullptr, Options.DisableTilt))
+				{
+					Options.ReducedTilt = false;
+					Options.DisableTilt = true;
+				}
+				ImGui::EndMenu();
+			}
+			
+			if (ImGui::BeginMenu(pb::get_rc_string(Msg::Menu3_CenterPostDuration)))
+			{
+				if (ImGui::MenuItem("30 s", nullptr, Options.CenterPostDuration == 30))
+					Options.CenterPostDuration = 30;
+
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_CenterPostOriginal), nullptr, Options.CenterPostDuration == 60))
+					Options.CenterPostDuration = 60;
+
+				if (ImGui::MenuItem("90 s", nullptr, Options.CenterPostDuration == 90))
+					Options.CenterPostDuration = 90;
+
+				if (ImGui::MenuItem("120 s", nullptr, Options.CenterPostDuration == 120))
+					Options.CenterPostDuration = 120;
+
+				if (ImGui::MenuItem("180 s", nullptr, Options.CenterPostDuration == 180))
+					Options.CenterPostDuration = 180;
+
+				ImGui::EndMenu();
+			}
+			
+			if (ImGui::BeginMenu(pb::get_rc_string(Msg::Menu3_Language)))
 			{
 				auto currentLanguage = translations::GetCurrentLanguage();
 				for (auto& item : translations::Languages)
@@ -558,21 +783,21 @@ void winmain::RenderUi()
 			}
 			ImGui::Separator();
 
-			if (ImGui::BeginMenu("Audio"))
+			if (ImGui::BeginMenu(pb::get_rc_string(Msg::Menu3_Audio)))
 			{
 				ImGuiMenuItemWShortcut(GameBindings::ToggleSounds, Options.Sounds);
-				if (ImGui::MenuItem("Stereo Sound Effects", nullptr, Options.SoundStereo))
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_StereoSoundEffects), nullptr, Options.SoundStereo))
 				{
 					options::toggle(Menu1::SoundStereo);
 				}
-				ImGui::TextUnformatted("Sound Volume");
+				ImGui::TextUnformatted(pb::get_rc_string(Msg::Menu3_SoundVolume));
 				if (ImGui::SliderInt("##Sound Volume", &Options.SoundVolume.V, options::MinVolume, options::MaxVolume,
 				                     "%d",
 				                     ImGuiSliderFlags_AlwaysClamp))
 				{
 					Sound::SetVolume(Options.SoundVolume);
 				}
-				ImGui::TextUnformatted("Sound Channels");
+				ImGui::TextUnformatted(pb::get_rc_string(Msg::Menu3_SoundChannels));
 				if (ImGui::SliderInt("##Sound Channels", &Options.SoundChannels.V, options::MinSoundChannels,
 				                     options::MaxSoundChannels, "%d", ImGuiSliderFlags_AlwaysClamp))
 				{
@@ -581,7 +806,7 @@ void winmain::RenderUi()
 				ImGui::Separator();
 
 				ImGuiMenuItemWShortcut(GameBindings::ToggleMusic, Options.Music);
-				ImGui::TextUnformatted("Music Volume");
+				ImGui::TextUnformatted(pb::get_rc_string(Msg::Menu3_MusicVolume));
 				if (ImGui::SliderInt("##Music Volume", &Options.MusicVolume.V, options::MinVolume, options::MaxVolume,
 				                     "%d",
 				                     ImGuiSliderFlags_AlwaysClamp))
@@ -591,30 +816,35 @@ void winmain::RenderUi()
 				ImGui::EndMenu();
 			}
 
-			if (ImGui::BeginMenu("Graphics"))
+			if (ImGui::BeginMenu(pb::get_rc_string(Msg::Menu3_Graphics)))
 			{
 				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu1_WindowUniformScale), nullptr, Options.UniformScaling))
 				{
 					options::toggle(Menu1::WindowUniformScale);
 				}
-				if (ImGui::MenuItem("Linear Filtering", nullptr, Options.LinearFiltering))
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_LinearFiltering), nullptr, Options.LinearFiltering))
 				{
 					options::toggle(Menu1::WindowLinearFilter);
 				}
-				if (ImGui::MenuItem("Integer Scaling", nullptr, Options.IntegerScaling))
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_EnhancedScaling), nullptr, Options.EnhancedScaling))
+				{
+					Options.EnhancedScaling ^= true;
+					render::recreate_screen_texture();
+				}
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_IntegerScaling), nullptr, Options.IntegerScaling))
 				{
 					options::toggle(Menu1::WindowIntegerScale);
 				}
-				if (ImGui::DragFloat("UI Scale", &Options.UIScale.V, 0.005f, 0.8f, 5,
+				if (ImGui::DragFloat(pb::get_rc_string(Msg::Menu3_UIScale), &Options.UIScale.V, 0.005f, 0.8f, 5,
 				                     "%.2f", ImGuiSliderFlags_AlwaysClamp))
 				{
 					ImIO->FontGlobalScale = Options.UIScale;
 				}
 				ImGui::Separator();
 
-				char buffer[80]{};
+				char buffer[160]{};
 				auto changed = false;
-				if (ImGui::MenuItem("Set Default UPS/FPS"))
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_SetDefaultUpsFps)))
 				{
 					changed = true;
 					Options.UpdatesPerSecond = options::DefUps;
@@ -632,12 +862,12 @@ void winmain::RenderUi()
 					changed = true;
 					Options.UpdatesPerSecond = std::max(Options.UpdatesPerSecond.V, Options.FramesPerSecond.V);
 				}
-				snprintf(buffer, sizeof buffer - 1, "Uncapped UPS (FPS ratio %02.02f)", UpdateToFrameRatio);
+				snprintf(buffer, sizeof buffer - 1, pb::get_rc_string(Msg::Menu3_UncappedUps), UpdateToFrameRatio);
 				if (ImGui::MenuItem(buffer, nullptr, Options.UncappedUpdatesPerSecond))
 				{
 					Options.UncappedUpdatesPerSecond ^= true;
 				}
-				if (ImGui::MenuItem("Precise Sleep", nullptr, Options.HybridSleep))
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_PreciseSleep), nullptr, Options.HybridSleep))
 				{
 					Options.HybridSleep ^= true;
 					SleepState = WelfordState{};
@@ -650,11 +880,11 @@ void winmain::RenderUi()
 				}
 				ImGui::Separator();
 
-				if (ImGui::MenuItem("Hide Cursor", nullptr, Options.HideCursor))
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_HideCursor), nullptr, Options.HideCursor))
 				{
 					Options.HideCursor ^= true;
 				}
-				if (ImGui::MenuItem("Change Font..."))
+				if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_ChangeFont)))
 				{
 					font_selection::ShowDialog();
 				}
@@ -694,16 +924,8 @@ void winmain::RenderUi()
 				ImGui::EndMenu();
 			}
 
-			if (ImGui::BeginMenu("Game Data"))
-			{
-				if (ImGui::MenuItem("Prefer 3DPB Data", nullptr, Options.Prefer3DPBGameData))
-				{
-					options::toggle(Menu1::Prefer3DPBGameData);
-				}
-				ImGui::EndMenu();
-			}
 			ImGui::Separator();
-			if (ImGui::MenuItem("Reset All Options"))
+			if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_ResetAllOptions)))
 			{
 				options::ResetAllOptions();
 				Restart();
@@ -713,23 +935,11 @@ void winmain::RenderUi()
 
 		if (ImGui::BeginMenu(pb::get_rc_string(Msg::Menu1_Help)))
 		{
-#ifndef NDEBUG
-			if (ImGui::MenuItem("ImGui Demo", nullptr, ShowImGuiDemo))
-			{
-				ShowImGuiDemo ^= true;
-			}
-#endif
-			if (ImGui::MenuItem("Sprite Viewer", nullptr, ShowSpriteViewer))
-			{
-				if (!ShowSpriteViewer)
-					pause(false);
-				ShowSpriteViewer ^= true;
-			}
 			if (pb::cheat_mode && ImGui::MenuItem("Frame Times", nullptr, DispGRhistory))
 			{
 				DispGRhistory ^= true;
 			}
-			if (ImGui::MenuItem("Debug Overlay", nullptr, Options.DebugOverlay))
+			if (ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_DebugOverlay), nullptr, Options.DebugOverlay))
 			{
 				Options.DebugOverlay ^= true;
 			}
@@ -755,7 +965,12 @@ void winmain::RenderUi()
 					Options.DebugOverlayCollisionMask ^= true;
 				ImGui::EndMenu();
 			}
-			if (ImGui::BeginMenu("Cheats"))
+			if (Options.LifetimeHighScore < CheatsCodeUnlockScore && ImGui::MenuItem(pb::get_rc_string(Msg::Menu3_CheatsCode)))
+			{
+				pb::ShowMessageBox(SDL_MESSAGEBOX_INFORMATION, pb::get_rc_string(Msg::Menu3_CheatsCode),
+				                   translations::GetTranslation(Msg::CheatsUnlockHint));
+			}
+			if (Options.LifetimeHighScore >= CheatsCodeUnlockScore && ImGui::BeginMenu(pb::get_rc_string(Msg::Menu3_CheatsCode)))
 			{
 				if (ImGui::MenuItem("hidden test", nullptr, pb::cheat_mode))
 					pb::PushCheat("hidden test");
@@ -770,7 +985,13 @@ void winmain::RenderUi()
 				if (pb::FullTiltMode && ImGui::MenuItem("quote"))
 					pb::PushCheat("quote");
 				if (ImGui::MenuItem("easy mode", nullptr, control::easyMode))
-					pb::PushCheat("easy mode");
+				{
+					if (Options.LifetimeHighScore >= EasyModeUnlockScore)
+						pb::PushCheat("easy mode");
+					else
+						pb::ShowMessageBox(SDL_MESSAGEBOX_INFORMATION, "easy mode",
+						                   translations::GetTranslation(Msg::EasyModeUnlockHint));
+				}
 
 				ImGui::EndMenu();
 			}
@@ -843,6 +1064,7 @@ int winmain::event_handler(const SDL_Event* event)
 	case SDL_KEYDOWN:
 	case SDL_MOUSEBUTTONDOWN:
 	case SDL_CONTROLLERBUTTONDOWN:
+	case SDL_JOYBUTTONDOWN:
 		inputDown = true;
 		break;
 	default: break;
@@ -875,6 +1097,7 @@ int winmain::event_handler(const SDL_Event* event)
 		if (mouseEvent)
 			return 1;
 	}
+	
 	if (ImIO->WantCaptureKeyboard && !options::WaitingForInput())
 	{
 		switch (event->type)
@@ -883,6 +1106,8 @@ int winmain::event_handler(const SDL_Event* event)
 		case SDL_KEYUP:
 		case SDL_CONTROLLERBUTTONDOWN:
 		case SDL_CONTROLLERBUTTONUP:
+		case SDL_JOYBUTTONDOWN:
+		case SDL_JOYBUTTONUP:
 			return 1;
 		default: ;
 		}
@@ -1026,6 +1251,10 @@ int winmain::event_handler(const SDL_Event* event)
 		{
 			SDL_GameControllerOpen(event->jdevice.which);
 		}
+		else
+		{
+			SDL_JoystickOpen(event->jdevice.which);
+		}
 		break;
 	case SDL_JOYDEVICEREMOVED:
 		{
@@ -1041,6 +1270,12 @@ int winmain::event_handler(const SDL_Event* event)
 		break;
 	case SDL_CONTROLLERBUTTONUP:
 		pb::InputUp({InputTypes::GameController, event->cbutton.button});
+		break;
+	case SDL_JOYBUTTONDOWN:
+		pb::InputDown({InputTypes::Joystick, event->jbutton.button});
+		break;
+	case SDL_JOYBUTTONUP:
+		pb::InputUp({InputTypes::Joystick, event->jbutton.button});
 		break;
 	default: ;
 	}
@@ -1098,159 +1333,44 @@ void winmain::a_dialog()
 	{
 		if (ImGui::BeginTabBar("AboutTabBar", ImGuiTabBarFlags_None))
 		{
-			if (ImGui::BeginTabItem("3DPB"))
+			if (ImGui::BeginTabItem("Talking"))
 			{
-				ImGui::TextUnformatted(pb::get_rc_string(Msg::STRING139));
-				ImGui::TextUnformatted("Original game by Cinematronics, Microsoft");
+				ImGui::TextUnformatted(ProductName);
+				ImGui::Text("Version %s", BuildInfo::Version);
+				
+				ImGui::TextUnformatted("Creatiel fork based on SpaceCadetPinball 2.1.0");
+				ImGui::TextUnformatted("Original game by Cinematronics for Maxis - Windows version by Microsoft");
 				ImGui::Separator();
 
-				ImGui::TextUnformatted("Decompiled -> Ported to SDL");
-				ImGui::Text("Version %s", Version);
-				if (ImGui::SmallButton("Project home: https://github.com/k4zmu2a/SpaceCadetPinball"))
+				ImGui::TextUnformatted("SpaceCadetPinball 2.1.0 by Andrey Muzychenko");			
+				
+				if (ImGui::SmallButton("Original project: https://github.com/k4zmu2a/SpaceCadetPinball"))
+					{
+					#if SDL_VERSION_ATLEAST(2, 0, 14)
+						SDL_OpenURL("https://github.com/k4zmu2a/SpaceCadetPinball");
+					#endif
+					}
+				
+				if (ImGui::SmallButton("Project home: https://creatiel.info/logiciels/3d-pinball-space-cadet-talking/"))
 				{
-#if SDL_VERSION_ATLEAST(2, 0, 14)
+				#if SDL_VERSION_ATLEAST(2, 0, 14)
 					// Relatively new feature, skip with older SDL
-					SDL_OpenURL("https://github.com/k4zmu2a/SpaceCadetPinball");
-#endif
+					SDL_OpenURL("https://creatiel.info/logiciels/3d-pinball-space-cadet-talking/");
+				#endif
 				}
+				
 				ImGui::EndTabItem();
 			}
-			ImGui::PushStyleColor(ImGuiCol_Button, 0);
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0);
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0);
-			if (ImGui::BeginTabItem("Full Tilt!"))
+			
+			if (ImGui::BeginTabItem("Changelog"))
 			{
-				const ImVec2 buttonCenter = { -1, 0 };
-				ImGui::Button("Full Tilt! was created by Cinematronics for Maxis.", buttonCenter);
-				ImGui::Button("Version 1.1", buttonCenter);
-
-				auto tableRow = [](LPCSTR textA, LPCSTR textB)
-				{
-					ImGui::TableNextRow();
-					ImGui::TableNextColumn();
-					ImGui::TextUnformatted(textA);
-					ImGui::TableNextColumn();
-					ImGui::TextUnformatted(textB);
-				};
-				if (ImGui::BeginTable("Full Tilt!", 2))
-				{
-					ImGui::TableNextRow();
-					ImGui::TableNextColumn();
-					ImGui::Button("Cinematronics", buttonCenter);
-					ImGui::Separator();
-					if (ImGui::BeginTable("Cinematronics", 2))
-					{
-						tableRow("PROGRAMMING", "ART");
-						tableRow("Michael Sandige", "John Frantz");
-						tableRow("John Taylor", "Ryan Medeiros");
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					if (ImGui::BeginTable("Cinematronics", 2))
-					{
-						tableRow("DESIGN", "SOUND EFFECTS");
-						tableRow("Kevin Gliner", "Matt Ridgeway");
-						tableRow(nullptr, "Donald S. Griffin");
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					if (ImGui::BeginTable("Cinematronics", 2))
-					{
-						tableRow("DESIGN CONSULTANT", "MUSIC");
-						tableRow("Mark Sprenger", "Matt Ridgeway");
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					if (ImGui::BeginTable("Cinematronics", 2))
-					{
-						tableRow("PRODUCER", "VOICES");
-						tableRow("Kevin Gliner", "Mike McGeary");
-						tableRow(nullptr, "William Rice");
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					if (ImGui::BeginTable("Cinematronics", 2))
-					{
-						tableRow("GRAND POOBAH", nullptr);
-						tableRow("David Stafford", nullptr);
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					ImGui::Button("SPECIAL THANKS", buttonCenter);
-					if (ImGui::BeginTable("Cinematronics", 2))
-					{
-						tableRow("Paula Sandige", "Alex St. John");
-						tableRow("Brad Silverberg", "Jeff Camp");
-						tableRow("Danny Thorpe", "Greg Hospelhorn");
-						tableRow("Keith Johnson", "Sean Grant");
-						tableRow("Bob McAnn", "Michael Kelley");
-						tableRow("Rob Rosenhouse", "Lisa Acton");
-						ImGui::EndTable();
-					}
-					ImGui::TextUnformatted("Dan and Mitchell Roth");
-
-					ImGui::TableNextColumn();
-					ImGui::Button("Maxis", buttonCenter);
-					ImGui::Separator();
-					if (ImGui::BeginTable("Maxis", 2))
-					{
-						tableRow("PRODUCER", "PRODUCT MANAGER");
-						tableRow("John Csicsery", "Larry Lee");
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					if (ImGui::BeginTable("Maxis", 2))
-					{
-						tableRow("LEAD TESTER", "QA MANAGER");
-						tableRow("Scott Shicoff", "Scott Shicoff");
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					ImGui::Button("ADDITIONAL TESTING", buttonCenter);
-					if (ImGui::BeginTable("Maxis", 2))
-					{
-						tableRow("Cathy Castro", "Robin Hines");
-						tableRow("John \"Jussi\" Ylinen", "Keith Meyer");
-						tableRow("Marc Meyer", "Owen Nelson");
-						tableRow("Joe Longworth", "Peter Saylor");
-						tableRow("Michael Gilmartin", "Robin Hines");
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					if (ImGui::BeginTable("Maxis", 2))
-					{
-						tableRow("ADDITIONAL ART", "ART DIRECTOR");
-						tableRow("Ocean Quigley", "Sharon Barr");
-						tableRow("Rick Macaraeg", "INSTALL PROGRAM");
-						tableRow("Charlie Aquilina", "Kevin O'Hare");
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					if (ImGui::BeginTable("Maxis", 2))
-					{
-						tableRow("INTRO MUSIC", "DOCUMENTATION");
-						tableRow("Brian Conrad", "David Caggiano");
-						tableRow("John Csicsery", "Michael Bremer");
-						tableRow(nullptr, "Bob Sombrio");
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-					ImGui::Button("SPECIAL THANKS", buttonCenter);
-					if (ImGui::BeginTable("Maxis", 2))
-					{
-						tableRow("Sam Poole", "Joe Scirica");
-						tableRow("Jeff Braun", "Bob Derber");
-						tableRow("Ashley Csicsery", "Tom Forge");
-						ImGui::EndTable();
-					}
-					ImGui::Button("Will \"Burr\" Wright", buttonCenter);
-					ImGui::EndTable();
-				}
-
+				ImGui::BeginChild("ChangelogText", ImVec2(0, 420), true,
+				                  ImGuiWindowFlags_HorizontalScrollbar);
+				ImGui::TextUnformatted(BuildInfo::Changelog);
+				ImGui::EndChild();
 				ImGui::EndTabItem();
 			}
 			ImGui::EndTabBar();
-			ImGui::PopStyleColor(3);
 		}
 
 		ImGui::Separator();
@@ -1292,6 +1412,11 @@ void winmain::Restart()
 	restart = true;
 	SDL_Event event{SDL_QUIT};
 	SDL_PushEvent(&event);
+}
+
+void winmain::ShowShockWarning()
+{
+	ShockWarningUntil = SDL_GetTicks() + 2000;
 }
 
 void winmain::UpdateFrameRate()

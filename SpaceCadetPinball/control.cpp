@@ -1,8 +1,12 @@
 #include "pch.h"
 #include "control.h"
+#include "BuildInfo.h"
 
 #include "midi.h"
+#include "Sound.h"
+#include "timer.h"
 #include "pb.h"
+#include "options.h"
 #include "TBall.h"
 #include "TBlocker.h"
 #include "TBumper.h"
@@ -30,6 +34,21 @@
 #include "TWall.h"
 #include "TTextBox.h"
 #include "translations.h"
+
+static Mix_Chunk* extraBallVoice = nullptr;
+static Mix_Chunk* firstServiceVoice = nullptr;
+static Mix_Chunk* centralBallBlockerVoice = nullptr;
+static int centerPostEndTime = 0;
+static Mix_Chunk* moreBallsVoice = nullptr;
+
+	static void play_more_balls_voice(int, void*)
+	{
+		if (!moreBallsVoice)
+			moreBallsVoice = Sound::LoadWaveFile(pb::make_path_name("MOREBALLS.WAV"));
+
+		if (moreBallsVoice)
+			Sound::PlaySound(moreBallsVoice, pb::time_ticks, nullptr, "more_balls_voice");
+	}
 
 int control_bump_scores1[] = {500, 1000, 1500, 2000};
 int control_roll_scores1[] = {2000};
@@ -845,9 +864,15 @@ std::reference_wrapper<TLight*> control::WormholeLightArray2[3] =
 
 void control::make_links(TPinballTable* table)
 {
-	TableG = table;
+    TableG = table;
 
-	for (auto& score_component : score_components)
+    if (!extraBallVoice)
+        extraBallVoice = Sound::LoadWaveFile(pb::make_path_name("EXTRABALL.WAV"));
+        
+	// if (!firstServiceVoice)
+    // firstServiceVoice = Sound::LoadWaveFile(pb::make_path_name("FIRSTSERVICE.WAV"));
+
+    for (auto& score_component : score_components)
 	{
 		auto linkedComp = make_component_link(score_component.Tag);
 		if (linkedComp)
@@ -862,7 +887,32 @@ void control::make_links(TPinballTable* table)
 
 void control::ClearLinks()
 {
-	TableG = nullptr;
+	centerPostEndTime = 0;
+    if (extraBallVoice)
+    {
+        Sound::FreeSound(extraBallVoice);
+        extraBallVoice = nullptr;
+    }
+
+	if (firstServiceVoice)
+	{
+		Sound::FreeSound(firstServiceVoice);
+		firstServiceVoice = nullptr;
+	}
+
+	if (centralBallBlockerVoice)
+	{
+		Sound::FreeSound(centralBallBlockerVoice);
+		centralBallBlockerVoice = nullptr;
+	}
+
+	if (moreBallsVoice)
+	{
+		Sound::FreeSound(moreBallsVoice);
+		moreBallsVoice = nullptr;
+	}
+
+    TableG = nullptr;
 	for (auto& component : score_components)
 		component.Tag.SetComponent(nullptr);
 	for (auto& component : simple_components)
@@ -916,43 +966,13 @@ void control::pbctrl_bdoor_controller(char key)
 		"I knew it worked too good to be right.",
 		"World's most expensive flippers"
 	};
-	static const char* credits[35]
+	const std::string versionLine = std::string("V ") + BuildInfo::Version;
+	const std::string credits[]
 	{
-		"Full Tilt! was created by Cinematronics",
-		"for Maxis.",
-		"Cinematronics Team:",
-		"Programming\nMichael Sandige\nJohn Taylor",
-		"Art\nJohn Frantz Jr.\nRyan Medeiros",
-		"Design\nKevin Gliner",
-		"Sound Effects\nMatt Ridgeway",
-		"Donald S. Griffin",
-		"Design Consultant\nMark Sprenger",
-		"Music\nMatt Ridgeway",
-		"Producer\nKevin Gliner",
-		"Voices\nMike McGeary\nWilliam Rice",
-		"Grand Poobah\nDavid Stafford",
-		"Special Thanks\nPaula Sandige\nAlex St. John",
-		"Brad Silverberg\nJeff Camp",
-		"Danny Thorpe\nGreg Hospelhorn",
-		"Maxis Team:",
-		"Producer\nJohn Csicsery",
-		"Product Manager\nLarry Lee",
-		"Lead Tester\nMichael Gilmartin",
-		"QA Manager\nAlan Barton",
-		"Additional Testing\nJoe Longworth\nScott Shicoff",
-		"Owen Nelson\nJohn \"Jussi\" Ylinen",
-		"John Landes\nMarc Meyer",
-		"Cathy Castro\nKeith Meyer",
-		"Additional Art\nOcean Quigley",
-		"Rick Macaraeg\nCharlie Aquilina",
-		"Art Director\nSharon Barr",
-		"Install Program\nKevin O'Hare",
-		"Intro Music",
-		"Brian Conrad",
-		"John Csicsery",
-		"Special Thanks\nSam Poole\nJoe Scirica",
-		"Jeff Braun\nBob Derber\nAshley Csicsery",
-		"Tom Forge\nWill \"Burr\" Wright",
+		std::string("3D PINBALL\nSPACE CADET TALKING\n") + versionLine,
+		std::string("Fork 3D Pinball\nSpace Cadet Talking\n") + versionLine,
+		"Dev by CREATIEL\nGerard Esperinas\nhttps://creatiel.info/logiciels/",
+		"Space Cadet Pinball\nOriginal by Cinematronics\n& 2.1.0 by Andrey Muzychenko"
 	};
 
 	// Original allowed to enter cheats only before the first launch.
@@ -992,8 +1012,8 @@ void control::pbctrl_bdoor_controller(char key)
 	{
 		// Full Tilt in-game credits, shown when idle for 60sec
 		float time = 0;
-		for (auto line : credits)
-			mission_text_box->Display(line, time += 2, true);
+		for (const auto& page : credits)
+			mission_text_box->Display(page.c_str(), time += 2, true, true);
 		pb::CreditsActive = true;
 		return;
 	}
@@ -1020,7 +1040,10 @@ void control::pbctrl_bdoor_controller(char key)
 void control::table_add_extra_ball(float count)
 {
 	++TableG->ExtraBalls;
-	soundwave28->Play(nullptr, "table_add_extra_ball");
+	// Bruitage original désactivé pour laisser la priorité à l'annonce vocale
+	// soundwave28->Play(nullptr, "table_add_extra_ball");
+if (extraBallVoice)
+    Sound::PlaySound(extraBallVoice, pb::time_ticks, nullptr, "extra_ball_voice");
 	info_text_box->Display(pb::get_rc_string(Msg::STRING110), count);
 }
 
@@ -1064,6 +1087,9 @@ void control::table_set_multiball(float time)
 		lite39->Message(MessageCode::TLightFlasherStartTimed, -1.0f);
 		lite40->Message(MessageCode::TLightFlasherStartTimed, -1.0f);
 		info_text_box->Display(pb::get_rc_string(Msg::STRING117), 2.0);
+		
+		timer::set(time + 0.2f, nullptr, play_more_balls_voice);
+ 
 		midi::play_track(MidiTracks::Track3, true);
 	}
 }
@@ -1340,9 +1366,19 @@ void control::DrainBallBlockerControl(MessageCode code, TPinballComponent* calle
 	case MessageCode::TBlockerEnable:
 		{
 			block->MessageField = 1;
-			auto blockerDuration = !easyMode ? static_cast<float>(block->InitialDuration) : -1;
+			centerPostEndTime = easyMode
+				? -1
+				: pb::time_ticks + options::Options.CenterPostDuration.V * 1000;
+			auto blockerDuration = !easyMode
+				? static_cast<float>(options::Options.CenterPostDuration.V - block->ExtendedDuration)
+				: -1;
 			block->Message(MessageCode::TBlockerEnable, blockerDuration);
 			lite1->Message(MessageCode::TLightTurnOnTimed, blockerDuration);
+			if (!centralBallBlockerVoice)
+				centralBallBlockerVoice = Sound::LoadWaveFile(pb::make_path_name("CENTRALBALLBLOCKER.WAV"));
+
+			if (centralBallBlockerVoice)
+				Sound::PlaySound(centralBallBlockerVoice, pb::time_ticks, nullptr, "central_ball_blocker_voice");			
 			break;
 		}
 	case MessageCode::ControlTimerExpired:
@@ -1358,12 +1394,22 @@ void control::DrainBallBlockerControl(MessageCode code, TPinballComponent* calle
 			else
 			{
 				block->MessageField = 0;
+				centerPostEndTime = 0;
 				block->Message(MessageCode::TBlockerDisable, 0.0);
 				break;
 			}
 		}
 	default: break;
 	}
+}
+
+int control::GetCenterPostSecondsRemaining()
+{
+	if (!block1 || !block1->ActiveFlag || block1->MessageField == 0 || centerPostEndTime == 0)
+		return 0;
+	if (centerPostEndTime < 0)
+		return -1;
+	return std::max(0, (centerPostEndTime - pb::time_ticks + 999) / 1000);
 }
 
 void control::LaunchRampControl(MessageCode code, TPinballComponent* caller)
@@ -2583,10 +2629,10 @@ void control::HyperspaceKickOutControl(MessageCode code, TPinballComponent* call
 			break;
 		}
 	}
-	auto duration = sound->Play(lite24, "HyperspaceKickOutControl4");
-	lite25->Message(MessageCode::TLightFlasherStartTimed, 5.0);
-	caller->Message(MessageCode::TKickoutRestartTimer, duration);
-}
+auto duration = sound->Play(lite24, "HyperspaceKickOutControl4");
+lite25->Message(MessageCode::TLightFlasherStartTimed, 5.0);
+caller->Message(MessageCode::TKickoutRestartTimer, duration);
+	}
 
 void control::PlungerControl(MessageCode code, TPinballComponent* caller)
 {
@@ -2747,10 +2793,17 @@ void control::BallDrainControl(MessageCode code, TPinballComponent* caller)
 			}
 			if (lite200->light_on())
 			{
-				soundwave27->Play(nullptr, "BallDrainControl2");
+				// soundwave27->Play(nullptr, "BallDrainControl2");
 				lite200->Message(MessageCode::TLightResetAndTurnOn, 0.0);
 				info_text_box->Display(pb::get_rc_string(Msg::STRING197), -1.0);
-				soundwave59->Play(nullptr, "BallDrainControl3");
+				
+				if (!firstServiceVoice)
+					firstServiceVoice = Sound::LoadWaveFile(pb::make_path_name("FIRSTSERVICE.WAV"));
+
+				if (firstServiceVoice)
+					Sound::PlaySound(firstServiceVoice, pb::time_ticks, nullptr, "first_service_voice");
+				
+				// soundwave59->Play(nullptr, "BallDrainControl3");
 			}
 			else if (lite199->light_on())
 			{

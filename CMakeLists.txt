@@ -3,6 +3,15 @@ project(SpaceCadetPinball)
 
 set(CMAKE_CXX_STANDARD 11)
 
+# Keep the About dialog tied to the exact source archive being built.
+set(SPACECADET_BUILD_VERSION "3.0.32")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.TXT" SPACECADET_CHANGELOG)
+configure_file(
+	"${CMAKE_CURRENT_SOURCE_DIR}/SpaceCadetPinball/BuildInfo.h.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/BuildInfo.h"
+	@ONLY
+)
+
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/bin)
 
@@ -23,7 +32,6 @@ if(APPLE)
     set(MACOSX_RPATH)
     set(CMAKE_BUILD_WITH_INSTALL_RPATH true)
     set(CMAKE_INSTALL_RPATH "@executable_path/../Frameworks")
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.11")
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
     list(APPEND SDL2_PATH "${CMAKE_CURRENT_LIST_DIR}/Libs")
     list(APPEND SDL2_MIXER_PATH "${CMAKE_CURRENT_LIST_DIR}/Libs")
@@ -35,7 +43,7 @@ set(SDL2_BUILDING_LIBRARY ON)
 find_package(SDL2 REQUIRED)
 FIND_PACKAGE(SDL2_mixer REQUIRED)
 
-include_directories(${SDL2_INCLUDE_DIR} ${SDL2_MIXER_INCLUDE_DIR})
+include_directories(${SDL2_INCLUDE_DIR} ${SDL2_MIXER_INCLUDE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
 foreach(dir ${dirs})
   message(STATUS "Include dir='${dir}'")
@@ -79,6 +87,8 @@ set(SOURCE_FILES
         SpaceCadetPinball/render.h
         SpaceCadetPinball/score.cpp
         SpaceCadetPinball/score.h
+		SpaceCadetPinball/UnicodeGlyphData.h
+		SpaceCadetPinball/MenuTranslations.inc
         SpaceCadetPinball/Sound.cpp
         SpaceCadetPinball/Sound.h
         SpaceCadetPinball/SpaceCadetPinball.cpp
@@ -237,11 +247,44 @@ endif()
 
 if(UNIX AND NOT APPLE)
 	include(GNUInstallDirs)
-	install(TARGETS "${PROJECT_NAME}" RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
-	install(FILES "${CMAKE_SOURCE_DIR}/Platform/Linux/${PROJECT_NAME}.desktop" DESTINATION "share/applications")
-	install(FILES "${CMAKE_SOURCE_DIR}/Platform/Linux/${PROJECT_NAME}.metainfo.xml" DESTINATION "share/metainfo")
+
+	# Executable
+	install(TARGETS "${PROJECT_NAME}"
+		RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+
+	# Custom voice files used by 3D Pinball Space Cadet Talking
+	install(FILES
+		"${CMAKE_SOURCE_DIR}/bin/WELCOME.WAV"
+		"${CMAKE_SOURCE_DIR}/bin/EXTRABALL.WAV"
+		"${CMAKE_SOURCE_DIR}/bin/FIRSTSERVICE.WAV"
+		"${CMAKE_SOURCE_DIR}/bin/CENTRALBALLBLOCKER.WAV"
+		"${CMAKE_SOURCE_DIR}/bin/MOREBALLS.WAV"
+		DESTINATION "${CMAKE_INSTALL_BINDIR}"
+	)
+
+	# Custom Game Over voice
+	install(FILES
+		"${CMAKE_SOURCE_DIR}/bin/SOUND/SOUND2.WAV"
+		DESTINATION "${CMAKE_INSTALL_BINDIR}/SOUND"
+	)
+
+	# Linux desktop integration
+	install(FILES
+		"${CMAKE_SOURCE_DIR}/Platform/Linux/${PROJECT_NAME}.desktop"
+		DESTINATION "${CMAKE_INSTALL_DATADIR}/applications"
+	)
+
+	install(FILES
+		"${CMAKE_SOURCE_DIR}/Platform/Linux/${PROJECT_NAME}.metainfo.xml"
+		DESTINATION "${CMAKE_INSTALL_DATADIR}/metainfo"
+	)
+
+	# Icons
 	foreach(S 16 32 48 128 192)
-		install(FILES "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Icon_${S}x${S}.png" DESTINATION
-			"share/icons/hicolor/${S}x${S}/apps" RENAME "${PROJECT_NAME}.png")
+		install(FILES
+			"${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Icon_${S}x${S}.png"
+			DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/${S}x${S}/apps"
+			RENAME "${PROJECT_NAME}.png"
+		)
 	endforeach(S)
 endif()

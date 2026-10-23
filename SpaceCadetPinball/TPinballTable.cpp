@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "options.h"
 #include "TPinballTable.h"
 
 
@@ -6,6 +7,7 @@
 #include "loader.h"
 #include "midi.h"
 #include "pb.h"
+#include "high_score.h"
 #include "render.h"
 #include "TBall.h"
 #include "TBlocker.h"
@@ -66,6 +68,11 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 	LightGroup = new TLightGroup(this, 0);
 
 	auto score1 = score::create("score1", render::background_bitmap);
+	if (score1)
+	{
+		score1->UseTint = true;
+		score1->TintColor = ColorRgba(80, 255, 80, 255);
+	}
 	CurScoreStruct = score1;
 	PlayerScores[0].ScoreStruct = score1;
 	for (int scoreIndex = 1; scoreIndex < 4; scoreIndex++)
@@ -76,7 +83,20 @@ TPinballTable::TPinballTable(): TPinballComponent(nullptr, -1, false)
 	CurrentPlayer = 0;
 	MaxBallCount = 3;
 	ScoreBallcount = score::create("ballcount1", render::background_bitmap);
+	if (ScoreBallcount)
+	{
+		// The custom right panel leaves a little more room below the ball digit.
+		// Move the digit only, keeping the panel image and all other fields unchanged.
+		ScoreBallcount->OffsetY += 3;
+		ScoreBallcount->UseTint = true;
+		ScoreBallcount->TintColor = ColorRgba(255, 80, 190, 255);
+	}
 	ScorePlayerNumber1 = score::create("player_number1", render::background_bitmap);
+	if (ScorePlayerNumber1)
+	{
+		ScorePlayerNumber1->UseTint = true;
+		ScorePlayerNumber1->TintColor = ColorRgba(80, 255, 80, 255);
+	}
 	int groupIndexObjects = loader::query_handle("table_objects");
 
 	short* shortArr = loader::query_iattribute(groupIndexObjects, 1025, &shortArrLength);
@@ -268,6 +288,12 @@ int TPinballTable::AddScore(int score)
 		++CurScoreE9;
 		CurScore = CurScore - 1000000000;
 	}
+	const auto scoreForUnlocks = CurScoreE9 > 0 ? 1000000000 : CurScore;
+	if (scoreForUnlocks > options::Options.LifetimeHighScore)
+	{
+		options::Options.LifetimeHighScore = scoreForUnlocks;
+		options::set_int("Lifetime High Score", scoreForUnlocks);
+	}
 	score::set(CurScoreStruct, CurScore);
 	return addedScore;
 }
@@ -275,6 +301,11 @@ int TPinballTable::AddScore(int score)
 void TPinballTable::ChangeBallCount(int count)
 {
 	BallCount = count;
+	if (ScoreBallcount)
+	{
+		ScoreBallcount->BlinkActive = count > 0;
+		ScoreBallcount->BlinkStartTicks = SDL_GetTicks();
+	}
 	if (count <= 0)
 	{
 		score::erase(ScoreBallcount, 1);
@@ -454,6 +485,9 @@ int TPinballTable::Message(MessageCode code, float value)
 			if (time < 0)
 				time = 5.0f;
 			LightShowTimer = timer::set(time, this, LightShow_timeout);
+			
+			if (!Demo || !Demo->ActiveFlag)
+				high_score::show_high_score_dialog();
 		}
 
 		if (pb::FullTiltMode)
@@ -688,6 +722,10 @@ void TPinballTable::LightShow_timeout(int timerId, void* caller)
 {
 	auto table = static_cast<TPinballTable*>(caller);
 	table->LightShowTimer = 0;
+
+	if (!table->Demo || !table->Demo->ActiveFlag)
+		high_score::close_high_score_dialog();
+
 	table->Message(MessageCode::StartGamePlayer1, 0.0);
 }
 

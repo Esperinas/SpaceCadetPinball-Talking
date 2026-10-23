@@ -1,0 +1,13 @@
+Unicode bitmap glyphs used for Simplified Chinese, Russian and Japanese are
+derived from GNU Unifont JP 17.0.03 by Paul Hardy and contributors.
+
+GNU Unifont is dual-licensed under the GNU GPL version 2 or later with the GNU
+Font Embedding Exception, and the SIL Open Font License 1.1. This project uses
+the SIL Open Font License 1.1 option.
+
+Project website: https://unifoundry.com/unifont/
+License: https://openfontlicense.org/open-font-license-official-text/
+
+Only the glyphs actually present in the game's Simplified Chinese, Russian and
+Japanese translations are included. They are stored as 8x16 or 16x16 bitmap
+rows in SpaceCadetPinball/UnicodeGlyphData.h.

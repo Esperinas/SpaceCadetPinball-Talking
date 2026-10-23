@@ -6,6 +6,7 @@
 #include "Sound.h"
 #include "zdrv.h"
 
+static constexpr float noise_level = -9.0f;
 
 errorMsg loader::loader_errors[] =
 {
@@ -173,7 +174,21 @@ int loader::get_sound_id(int groupIndex)
 				}
 
 				sound_list[soundIndex].Duration = duration;
+				       
 				sound_list[soundIndex].WavePtr = Sound::LoadWaveFile(filePath);
+
+				const auto isFullVolumeSound =
+					filePath.find("SOUND2.WAV") != std::string::npos ||
+					filePath.find("sound2.wav") != std::string::npos ||
+					filePath.find("SOUND9.WAV") != std::string::npos ||
+					filePath.find("sound9.wav") != std::string::npos;
+
+				if (sound_list[soundIndex].WavePtr && !isFullVolumeSound)
+				{
+					const auto gain = std::pow(10.0f, noise_level / 20.0f);
+					const auto volume = static_cast<int>(MIX_MAX_VOLUME * gain + 0.5f);
+					Mix_VolumeChunk(sound_list[soundIndex].WavePtr, volume);
+				}
 			}
 		}
 	}
@@ -331,13 +346,13 @@ int loader::material(int groupIndex, visualStruct* visual)
 	}
 	return 0;
 }
-
 float loader::play_sound(int soundIndex, TPinballComponent *soundSource, const char *info)
 {
-	if (soundIndex <= 0)
-		return 0.0;
-	Sound::PlaySound(sound_list[soundIndex].WavePtr, pb::time_ticks, soundSource, info);
-	return sound_list[soundIndex].Duration;
+    if (soundIndex <= 0)
+        return 0.0;
+
+    Sound::PlaySound(sound_list[soundIndex].WavePtr, pb::time_ticks, soundSource, info);
+    return sound_list[soundIndex].Duration;
 }
 
 int loader::state_id(int groupIndex, int groupIndexOffset)

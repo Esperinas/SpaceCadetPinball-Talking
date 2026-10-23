@@ -94,6 +94,7 @@ public:
 	static void cheat_bump_rank();
 	static int SpecialAddScore(int score, bool mission = false);
 	static int AddRankProgress(int rank);
+	static int GetCenterPostSecondsRemaining();
 	static void AdvanceWormHoleDestination(int flag);
 
 	static void FlipperRebounderControl1(MessageCode code, TPinballComponent* caller);

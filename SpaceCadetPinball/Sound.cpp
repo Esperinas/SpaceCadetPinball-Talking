@@ -3,6 +3,8 @@
 #include "Sound.h"
 #include "maths.h"
 
+namespace { constexpr int VoiceChannels = 4; }
+
 int Sound::num_channels;
 bool Sound::enabled_flag = false;
 std::vector<ChannelInfo> Sound::Channels{};
@@ -46,18 +48,39 @@ void Sound::PlaySound(Mix_Chunk* wavePtr, int time, TPinballComponent* soundSour
 {
 	if (MixOpen && wavePtr && enabled_flag)
 	{
-		if (Mix_Playing(-1) == num_channels)
+		const bool isVoice = info && strstr(info, "_voice");
+		int channel = -1;
+		if (isVoice)
 		{
-			auto cmp = [](const ChannelInfo& a, const ChannelInfo& b)
+			// Never replace a voice already playing, including with another voice.
+			for (int index = 0; index < VoiceChannels; ++index)
+				if (!Mix_Playing(index))
+				{
+					channel = Mix_PlayChannel(index, wavePtr, 0);
+					break;
+				}
+		}
+		else
+		{
+			int selected = -1;
+			for (int index = VoiceChannels; index < num_channels; ++index)
+				if (!Mix_Playing(index))
+				{
+					selected = index;
+					break;
+				}
+			if (selected == -1)
 			{
-				return a.TimeStamp < b.TimeStamp;
-			};
-			auto min = std::min_element(Channels.begin(), Channels.end(), cmp);
-			auto oldestChannel = static_cast<int>(std::distance(Channels.begin(), min));
-			Mix_HaltChannel(oldestChannel);
+				// Recycle an effect before playback, avoiding a failing automatic allocation.
+				auto firstEffect = Channels.begin() + VoiceChannels;
+				auto oldest = std::min_element(firstEffect, Channels.end(),
+					[](const ChannelInfo& a, const ChannelInfo& b) { return a.TimeStamp < b.TimeStamp; });
+				selected = static_cast<int>(std::distance(Channels.begin(), oldest));
+				Mix_HaltChannel(selected);
+			}
+			channel = Mix_PlayChannel(selected, wavePtr, 0);
 		}
 
-		auto channel = Mix_PlayChannel(-1, wavePtr, 0);
 		if (channel != -1)
 		{
 			Channels[channel].TimeStamp = time;
@@ -139,10 +162,13 @@ void Sound::SetChannels(int channels)
 	if (channels <= 0)
 		channels = 8;
 
-	num_channels = channels;
+	num_channels = channels + VoiceChannels;
 	Channels.resize(num_channels);
 	if (MixOpen)
+	{
 		Mix_AllocateChannels(num_channels);
+		Mix_ReserveChannels(VoiceChannels);
+	}
 	SetVolume(Volume);
 }
 

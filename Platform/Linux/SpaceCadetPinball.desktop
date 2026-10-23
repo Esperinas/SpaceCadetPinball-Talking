@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
-Name=Space Cadet Pinball
-Comment=Decompilation of 3D Pinball for Windows - Space Cadet
+Name=3D Pinball Space Cadet Talking
+Comment=Creatiel fork of SpaceCadetPinball with enhanced gameplay, voices and controller support
 Exec=SpaceCadetPinball
 StartupNotify=true
 Terminal=false

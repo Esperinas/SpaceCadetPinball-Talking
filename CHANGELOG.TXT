@@ -1,0 +1,157 @@
+# 3D Pinball Space Cadet Talking 3.0.32 - Changelog
+
+Creatiel fork based on SpaceCadetPinball Release 2.1.0 by Andrey Muzychenko.
+
+## Version 3.0.32
+- Fixed a Windows audio bug inherited from SpaceCadetPinball 2.1.0: lowering MIDI music volume also lowered the entire application volume in the Windows mixer, making voice announcements and sound effects too quiet.
+- Windows: replaced native MIDI playback with bundled TiMidity software synthesis.
+- Disabled the native MIDI backend to prevent music volume from changing the Windows application mixer volume.
+- Music volume is independent of voices and sound effects; no forced change to the user's Windows mixer setting.
+- Bundled Freepats instruments and their license notices in Windows packages.
+- Linux audio playback remains unchanged.
+
+## Version 3.0.31
+- Removed the temporary automatic multiball test and its score-disqualification injection.
+- Retained the validated voice-channel protection and effect-channel allocation fixes.
+- Replaced the high-score window's salmon background with #6BADF7.
+
+## Version 3.0.30
+- Selected a free effect channel explicitly before playback.
+- Recycled the oldest effect first when all effect channels are occupied, avoiding No free channels available errors.
+- Retained voice protection and the temporary multiball test.
+
+## Version 3.0.29
+- Added four reserved channels for Talking voice announcements.
+- Effect-channel recycling no longer interrupts voices.
+- Busy voice channels are never replaced by a new voice.
+- Retained the temporary 20-second multiball test for audio validation.
+
+## Version 3.0.28 (temporary multiball test)
+- Triggered normal multiball once per new game after 20 seconds of active-ball simulation time.
+- Used the existing release timers, voice callback and music without audio changes.
+- Marked injected multiball games as CheatsUsed to exclude them from normal high scores.
+- Skipped injection when natural multiball is already running.
+
+## Version 3.0.27
+- Skipped newline glyphs in bitmap drawing, removing question marks from multiline messages.
+- Blinked the ball-number display for 1.5 seconds on each positive ChangeBallCount call.
+- Restored steady visibility automatically after blinking; ball values are unchanged.
+
+## Version 3.0.26
+- Rendered the startup welcome with the native bitmap message font.
+- Removed the Full Tilt! tab and its unused button-style overrides from About.
+
+## Version 3.0.25
+- Fixed score and player-number tinting with the custom table's null-background renderer.
+- Applied the startup welcome after initial NewGame so it is not overwritten.
+
+## Version 3.0.24
+- Replaced idle credits with four English pages of exactly three lines.
+- Credits and startup welcome use the current build version automatically.
+- Displayed Welcome only at application startup; gameplay deployment messages remain translated.
+- Changed player-number and score digits to green.
+- Preserved explicit line breaks in welcome and credits, fitting text to the display.
+
+## Version 3.0.23
+
+### Gameplay
+- Added three Tilt modes: Tilt, Tilt soft and No Tilt.
+- Tilt soft doubles the warning and Tilt thresholds.
+- No Tilt prevents Tilt while retaining the red "Shock !" warning.
+- Added configurable Center Post durations: 30, 60, 90, 120 or 180 seconds.
+- Added a visible Center Post countdown below the MAXIS logo.
+- Cheats Code remains visible but locked until the lifetime high score reaches 18,000,000.
+- Easy Mode remains locked until the lifetime high score reaches 30,000,000.
+- Unlocking is based on the persistent lifetime high score.
+- Removed the 3DPB data preference; CADET.DAT is always prioritised.
+- PINBALL.DAT and DEMO.DAT remain available as compatibility fallbacks.
+
+### Talking audio
+- Added a welcome voice announcement.
+- Added custom voice announcements for Extra Ball, First Service, Center Post and Multiball.
+- Added a custom Game Over voice sequence.
+- SOUND9 combines its original opening effect with the "Big Bonus!" announcement.
+- Added applause when a score qualifies for the High Scores table.
+- Added a drum roll followed by applause when a new rank-1 record is achieved.
+- Increased the applause and drum-roll levels with peak limiting.
+- Reduced original table effects by 9 dB to improve voice clarity.
+- Voice notifications, SOUND9 and Game Over remain exempt from this attenuation.
+- Original effects that conflicted with Talking announcements were removed or adjusted.
+
+### Right panel and interface
+- Replaced the original right-side artwork with a customised Space Shuttle panel.
+- Added a pixel-perfect 325x640 native panel layer.
+- Added a separate high-resolution shuttle and star-field layer for fullscreen mode.
+- Preserved dynamic score, ball-number and message displays above the artwork.
+- Added four independently twinkling stars.
+- Added an animated warm-white halo to the SPACE CADET title.
+- Added six flashing pale-yellow and red shuttle exhaust rays.
+- Added a green Extra Ball reserve indicator inside the title arc.
+- Added a pink ball-number display and adjusted its vertical alignment.
+- Added yellow text to the upper message display.
+- Added a coloured High Scores window with eight stored entries.
+- Centred and proportionally scaled the High Scores window on the right panel.
+- Added the complete build identifier and a Changelog tab to the About dialog.
+- Added a Web Projet entry to the Game menu linking to the official project page.
+- The game window is minimised when Web Projet is selected so the browser opens in the foreground, including from fullscreen mode.
+- Removed the 3DPB data submenu from Options.
+- Removed the ImGui Demo and Sprite Viewer developer tools from Help.
+- Preserved the familiar expression "Cheats Code" in Latin-alphabet menu languages.
+
+### Text and languages
+- Added French accented characters to the original bitmap font.
+- Added bitmap glyph support for Spanish, Portuguese, Italian and German.
+- Added Unicode bitmap glyphs for Simplified Chinese, Russian and Japanese.
+- Added a compact GNU Unifont JP subset containing only required glyphs.
+- Added an automatic Unicode font fallback for long messages that do not fit at native bitmap size.
+- Long fallback messages use larger, bold, centred text in the display colour.
+- Added complete menus and custom-option translations for all 24 supported languages.
+- Shortened overly detailed custom menu labels, including the Center Post duration setting.
+- Added right-to-left menu presentation for Arabic and Hebrew.
+- Preserved the pinball term "Tilt" in every language.
+
+### Controls and system
+- Added support for generic SDL joystick devices.
+- Generic joystick buttons can be assigned in Game Controls.
+- Existing SDL Game Controller support is preserved.
+- Prevented multiple simultaneous game instances.
+- Added optional Enhanced Scaling (3.0), disabled by default.
+- Restored the original dark background around the table.
+
+### Fixed
+- Fixed progressive table displacement after repeated nudges.
+- Fixed nudge rendering with Enhanced Scaling.
+- Removed obsolete slow two-pass scaling implementations.
+- Fixed French accents being replaced by unaccented bitmap glyphs.
+- Fixed colour and proportions of generated bitmap accents.
+- Fixed stale fragments at the right edge of long messages.
+- Fixed centring and wrapping of Unicode fallback messages.
+- Preserved existing five-entry score tables during migration to eight entries.
+- Fixed score-window placement in windowed and fullscreen modes.
+- Fixed alignment of the Center Post countdown and shuttle exhaust origin.
+
+### Included custom audio
+- WELCOME.WAV
+- EXTRABALL.WAV
+- FIRSTSERVICE.WAV
+- CENTRALBALLBLOCKER.WAV
+- MOREBALLS.WAV
+- APPLAU.WAV
+- DRUM.WAV
+- SOUND/SOUND2.WAV
+- SOUND/SOUND9.WAV
+
+### Validation summary
+- Gameplay remains fluid with Enhanced Scaling enabled or disabled.
+- Table nudges return correctly without cropping or right-panel displacement.
+- Bitmap and Unicode text were tested across all 24 supported languages.
+- French, Spanish, Portuguese, Italian and German accented bitmap glyphs display correctly.
+- Simplified Chinese, Russian and Japanese in-game bitmap text displays correctly.
+- Arabic and Hebrew menus display in right-to-left order.
+- The eight-entry High Scores table saves new entries correctly.
+- High Scores placement and scaling were tested in 1024x768 and fullscreen modes.
+- Custom right-panel artwork remains aligned and sharp in fullscreen mode.
+- Title halo, twinkling stars and exhaust-ray animations display correctly.
+- Extra Ball and Center Post indicators display correctly.
+- Talking announcements and customised gameplay sounds are clearly audible.
+- Generic joystick bindings were tested with a Thrustmaster Dual Analog 3.2.

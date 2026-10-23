@@ -1,0 +1,7 @@
+#pragma once
+
+namespace BuildInfo
+{
+	static constexpr const char* Version = "@SPACECADET_BUILD_VERSION@";
+	static constexpr const char* Changelog = R"CHANGELOG(@SPACECADET_CHANGELOG@)CHANGELOG";
+}

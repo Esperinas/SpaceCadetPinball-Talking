@@ -257,6 +257,32 @@ void gdrv::copy_bitmap_w_transparency(gdrv_bitmap8* dstBmp, int width, int heigh
 	}
 }
 
+void gdrv::copy_bitmap_w_transparency_tinted(gdrv_bitmap8* dstBmp, int width, int height, int xOff, int yOff,
+                                             gdrv_bitmap8* srcBmp, int srcXOff, int srcYOff, ColorRgba tint)
+{
+	auto srcPtr = &srcBmp->BmpBufPtr1[srcBmp->Stride * srcYOff + srcXOff];
+	auto dstPtr = &dstBmp->BmpBufPtr1[dstBmp->Stride * yOff + xOff];
+	for (int y = height; y > 0; --y)
+	{
+		for (int x = width; x > 0; --x)
+		{
+			if (srcPtr->Color)
+			{
+				const auto brightness = std::max({srcPtr->GetRed(), srcPtr->GetGreen(), srcPtr->GetBlue()});
+				const auto level = std::max<int>(brightness, 96);
+				*dstPtr = ColorRgba(
+					static_cast<uint8_t>(tint.GetRed() * level / 255),
+					static_cast<uint8_t>(tint.GetGreen() * level / 255),
+					static_cast<uint8_t>(tint.GetBlue() * level / 255), 255);
+			}
+			++srcPtr;
+			++dstPtr;
+		}
+		srcPtr += srcBmp->Stride - width;
+		dstPtr += dstBmp->Stride - width;
+	}
+}
+
 void gdrv::ScrollBitmapHorizontal(gdrv_bitmap8* bmp, int xStart)
 {
 	auto srcPtr = bmp->BmpBufPtr1;
