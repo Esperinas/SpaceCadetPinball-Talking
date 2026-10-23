@@ -1,0 +1,74 @@
+name: Build Windows Talking
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Retrieve source code
+        uses: actions/checkout@v4
+
+      - name: Download SDL dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Invoke-WebRequest `
+            "https://github.com/libsdl-org/SDL/releases/download/release-2.30.0/SDL2-devel-2.30.0-VC.zip" `
+            -OutFile "$env:RUNNER_TEMP/sdl.zip"
+
+          Invoke-WebRequest `
+            "https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.8.0/SDL2_mixer-devel-2.8.0-VC.zip" `
+            -OutFile "$env:RUNNER_TEMP/mixer.zip"
+
+          Expand-Archive "$env:RUNNER_TEMP/sdl.zip" "$env:RUNNER_TEMP/sdl"
+          Expand-Archive "$env:RUNNER_TEMP/mixer.zip" "$env:RUNNER_TEMP/mixer"
+
+          New-Item -ItemType Directory -Force Libs | Out-Null
+          Copy-Item "$env:RUNNER_TEMP/sdl/SDL2-2.30.0" "Libs/SDL2" -Recurse
+          Copy-Item "$env:RUNNER_TEMP/mixer/SDL2_mixer-2.8.0" "Libs/SDL2_mixer" -Recurse
+
+      - name: Configure
+        run: >
+          cmake -S . -B build-windows
+          -G "Visual Studio 17 2022" -A x64
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Compile
+        run: cmake --build build-windows --config Release --parallel 2
+
+      - name: Collect executable and dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = "bin/Release/SpaceCadetPinball.exe"
+          if (!(Test-Path $exe)) {
+            throw "Expected executable not found: $exe"
+          }
+
+          New-Item -ItemType Directory -Force artifact | Out-Null
+          Copy-Item $exe artifact/
+          Copy-Item "Libs/SDL2/lib/x64/SDL2.dll" artifact/
+          Copy-Item "Libs/SDL2_mixer/lib/x64/*.dll" artifact/
+          Copy-Item "bin/*.WAV" artifact/
+          Copy-Item "bin/SOUND" artifact/SOUND -Recurse
+          Copy-Item LICENSE, COPYING-GPL-3.0.txt, LICENSING.md artifact/
+          Copy-Item licenses artifact/licenses -Recurse
+
+      - name: Save build result
+        uses: actions/upload-artifact@v4
+        with:
+          name: Talking-Windows-x64-build
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 14
